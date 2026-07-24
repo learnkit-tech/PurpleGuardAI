@@ -1,18 +1,22 @@
 from scanner.reporting.html_report import generate_html_report
 from scanner.engine import SecurityScanner
 from scanner.reporting import enrich_findings
+from scanner.filtering import filter_by_severity
 import json
 import argparse
 from datetime import datetime
 
 
-def run_scan(target, generate_json=True, generate_html=True):
+def run_scan(target, generate_json=True, generate_html=True, severity=None):
 
     scanner = SecurityScanner(target)
 
     results = scanner.scan()
 
     results = enrich_findings(results)
+
+    if severity:
+        results = filter_by_severity(results, severity)
 
     report = {
         "scanner": "PurpleGuardAI",
@@ -65,10 +69,16 @@ parser.add_argument(
     help="Generate HTML report"
 )
 
+parser.add_argument(
+    "--severity",
+    help="Filter findings by minimum severity"
+)
+
 args = parser.parse_args()
 
 run_scan(
     args.target,
     generate_json=args.json or not (args.json or args.html),
-    generate_html=args.html or not (args.json or args.html)
+    generate_html=args.html or not (args.json or args.html),
+    severity=args.severity
 )
