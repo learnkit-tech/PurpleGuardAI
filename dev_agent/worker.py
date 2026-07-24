@@ -4,6 +4,7 @@ import os
 
 from dev_agent.run_agent import main
 from dev_agent.status import update_status
+from dev_agent.autonomous_planner import AutonomousPlanner
 
 
 ROADMAP = "tasks/roadmap.json"
@@ -26,6 +27,11 @@ def save_tasks(tasks):
 
 def run_worker():
 
+    planner = AutonomousPlanner()
+
+    planner.generate_tasks()
+
+
     update_status({
         "status": "worker_started"
     })
@@ -34,6 +40,7 @@ def run_worker():
     while True:
 
         tasks = load_tasks()
+
 
         pending = [
             task for task in tasks
@@ -45,7 +52,7 @@ def run_worker():
 
             update_status({
                 "status": "finished",
-                "message": "All tasks completed"
+                "message": "No more discovered tasks"
             })
 
             break
@@ -58,6 +65,10 @@ def run_worker():
             "status": "building",
             "task": current["task"]
         })
+
+
+        print("Building:")
+        print(current["task"])
 
 
         try:
@@ -80,13 +91,11 @@ def run_worker():
 
             update_status({
                 "status": "error",
-                "task": current["task"],
                 "message": str(error)
             })
 
 
         time.sleep(10)
-
 
 
 if __name__ == "__main__":

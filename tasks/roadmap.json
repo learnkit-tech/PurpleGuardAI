@@ -1,21 +1,6 @@
 [
     {
         "id": 1,
-        "task": "Add SARIF security report output",
-        "status": "completed"
-    },
-    {
-        "id": 2,
-        "task": "Improve vulnerability detection rules",
-        "status": "completed"
-    },
-    {
-        "id": 3,
-        "task": "Create API interface for scanner",
-        "status": "completed"
-    },
-    {
-        "id": 4,
         "task": "Create web dashboard",
         "status": "pending"
     }
