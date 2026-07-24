@@ -1,34 +1,26 @@
-import os
-import json
+from agent_api.llm_provider import LLMProvider
 
 
 class LLMClient:
 
     def __init__(self):
 
-        self.provider = os.getenv(
-            "AI_PROVIDER",
-            "none"
-        )
+        self.provider = LLMProvider()
 
 
     def ask(self, prompt):
 
-        if self.provider == "none":
+        result = self.provider.generate(
+            prompt
+        )
 
-            return json.dumps(
-                {
-                    "file": None,
-                    "content": None,
-                    "message": "No AI provider connected yet"
-                }
+
+        if result["status"] == "error":
+
+            return (
+                "AI unavailable: "
+                + result["message"]
             )
 
 
-        return json.dumps(
-            {
-                "file": None,
-                "content": None,
-                "message": "Provider not implemented"
-            }
-        )
+        return result["response"]
