@@ -15,6 +15,3 @@ env/
 
 # Reports
 reports/*.json
-
-# Termux/system files
-*.log
