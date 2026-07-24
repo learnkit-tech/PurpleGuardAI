@@ -1,4 +1,4 @@
 {
     "status": "building",
-    "task": "Add SARIF security report output"
+    "task": "Improve vulnerability detection rules"
 }

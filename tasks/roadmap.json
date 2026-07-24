@@ -2,7 +2,7 @@
     {
         "id": 1,
         "task": "Add SARIF security report output",
-        "status": "pending"
+        "status": "completed"
     },
     {
         "id": 2,
