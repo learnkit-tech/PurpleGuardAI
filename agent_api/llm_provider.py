@@ -34,20 +34,7 @@ class LLMProvider:
             "messages": [
                 {
                     "role": "system",
-                    "content": """
-You are an autonomous senior software engineer.
-Return ONLY valid JSON.
-
-Format:
-{
- "files": [
-  {
-   "path": "file/path.py",
-   "content": "complete code"
-  }
- ]
-}
-"""
+                    "content": "You are a senior software engineer. Return only valid JSON."
                 },
                 {
                     "role": "user",
@@ -65,6 +52,22 @@ Format:
 
 
         result = response.json()
+
+
+        if "error" in result:
+
+            return {
+                "status": "error",
+                "message": result["error"]["message"]
+            }
+
+
+        if "choices" not in result:
+
+            return {
+                "status": "error",
+                "message": str(result)
+            }
 
 
         return {
