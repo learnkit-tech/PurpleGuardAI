@@ -1,5 +1,3 @@
-import os
-import json
 from agent_api.llm_provider import LLMProvider
 
 
@@ -11,16 +9,12 @@ class LLMClient:
 
     def ask(self, prompt):
 
-        response = self.provider.generate(
-            prompt
-        )
+        response = self.provider.generate(prompt)
+
+        print("\nRAW AI RESPONSE:")
+        print(response)
 
         if response["status"] != "success":
-            return json.dumps({
-                "files": [],
-                "message": response["message"]
-            })
-
+            return '{"files": []}'
 
         return response["response"]
-
