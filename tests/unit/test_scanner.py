@@ -1,3 +1,4 @@
+
 import unittest
 from scanner.engine import SecurityScanner
 
@@ -57,6 +58,25 @@ class TestScanner(unittest.TestCase):
 
         self.assertIn(
             "PG003",
+            ids
+        )
+
+
+    def test_detects_sql_injection(self):
+
+        scanner = SecurityScanner(
+            "tests/vulnerable_app"
+        )
+
+        results = scanner.scan()
+
+        ids = [
+            item["id"]
+            for item in results
+        ]
+
+        self.assertIn(
+            "PG004",
             ids
         )
 

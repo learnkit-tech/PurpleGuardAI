@@ -20,13 +20,22 @@
     },
 
     "PG003": {
-    "name": "Hardcoded Secret",
-    "category": "Secrets Management",
-    "severity": "HIGH",
-    "score": 8.5,
-    "priority": "HIGH",
-    "description": "Sensitive secrets such as API keys or tokens stored in source code can be exposed.",
-    "recommendation": "Use environment variables or a dedicated secrets manager."
-}
-}
+        "name": "Hardcoded Secret",
+        "category": "Secrets Management",
+        "severity": "HIGH",
+        "score": 8.5,
+        "priority": "HIGH",
+        "description": "Sensitive secrets such as API keys or tokens stored in source code can be exposed.",
+        "recommendation": "Use environment variables or a dedicated secrets manager."
+    },
 
+    "PG004": {
+        "name": "SQL Injection Risk",
+        "category": "Injection",
+        "severity": "HIGH",
+        "score": 9.0,
+        "priority": "CRITICAL",
+        "description": "User-controlled data combined directly with SQL queries can allow attackers to manipulate database commands.",
+        "recommendation": "Use parameterized queries or prepared statements."
+    }
+}
