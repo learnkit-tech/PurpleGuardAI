@@ -1,0 +1,22 @@
+[
+    {
+        "id": 1,
+        "task": "Add SARIF security report output",
+        "status": "pending"
+    },
+    {
+        "id": 2,
+        "task": "Improve vulnerability detection rules",
+        "status": "pending"
+    },
+    {
+        "id": 3,
+        "task": "Create API interface for scanner",
+        "status": "pending"
+    },
+    {
+        "id": 4,
+        "task": "Create web dashboard",
+        "status": "pending"
+    }
+]
