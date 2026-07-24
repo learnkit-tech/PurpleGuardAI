@@ -6,7 +6,7 @@ import argparse
 from datetime import datetime
 
 
-def run_scan(target):
+def run_scan(target, generate_json=True, generate_html=True):
 
     scanner = SecurityScanner(target)
 
@@ -31,15 +31,17 @@ def run_scan(target):
     for item in results:
         print(item)
 
-    with open("reports/scan_report.json", "w") as file:
-        json.dump(report, file, indent=4)
+    if generate_json:
+        with open("reports/scan_report.json", "w") as file:
+            json.dump(report, file, indent=4)
 
         print("\nReport saved: reports/scan_report.json")
 
-    generate_html_report(
-        "reports/scan_report.json",
-        "reports/scan_report.html"
-    )
+    if generate_html:
+        generate_html_report(
+            "reports/scan_report.json",
+            "reports/scan_report.html"
+        )
 
 
 parser = argparse.ArgumentParser(
@@ -51,7 +53,22 @@ parser.add_argument(
     help="Directory to scan"
 )
 
+parser.add_argument(
+    "--json",
+    action="store_true",
+    help="Generate JSON report"
+)
+
+parser.add_argument(
+    "--html",
+    action="store_true",
+    help="Generate HTML report"
+)
+
 args = parser.parse_args()
 
-run_scan(args.target)
-
+run_scan(
+    args.target,
+    generate_json=args.json or not (args.json or args.html),
+    generate_html=args.html or not (args.json or args.html)
+)
