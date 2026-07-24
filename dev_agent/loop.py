@@ -7,6 +7,7 @@ from dev_agent.code_generator import CodeGenerator
 from dev_agent.change_manager import ChangeManager
 from dev_agent.git_manager import GitManager
 from dev_agent.self_corrector import SelfCorrector
+from dev_agent.task_router import route_task
 
 
 class DeveloperAgent:
@@ -46,6 +47,15 @@ class DeveloperAgent:
         print(task["task"])
 
 
+        route = route_task(
+            task["task"]
+        )
+
+
+        print("Task route:")
+        print(route)
+
+
         self.git.checkpoint()
 
 
@@ -63,6 +73,19 @@ class DeveloperAgent:
             task["task"],
             files
         )
+
+
+        prompt += f"""
+
+Project Area:
+{route["area"]}
+
+Target Files:
+{route["files"]}
+
+Goal:
+{route["goal"]}
+"""
 
 
         response = self.ai.ask(prompt)
