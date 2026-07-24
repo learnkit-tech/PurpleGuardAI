@@ -1,4 +1,4 @@
 {
     "status": "building",
-    "task": "Improve vulnerability detection rules"
+    "task": "Create API interface for scanner"
 }
