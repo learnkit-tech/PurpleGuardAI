@@ -1,0 +1,17 @@
+{
+    "PG001": {
+        "name": "Hardcoded Password",
+        "category": "Secrets Management",
+        "severity": "HIGH",
+        "description": "Credentials stored directly in source code can be exposed.",
+        "recommendation": "Use environment variables or a secrets manager."
+    },
+
+    "PG002": {
+        "name": "Dangerous eval Usage",
+        "category": "Code Injection",
+        "severity": "HIGH",
+        "description": "eval() can execute attacker-controlled code.",
+        "recommendation": "Avoid eval() and use safer parsing methods."
+    }
+}

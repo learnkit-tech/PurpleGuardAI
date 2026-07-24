@@ -1,4 +1,5 @@
 from scanner.engine import SecurityScanner
+from scanner.reporting import enrich_findings
 import json
 import argparse
 from datetime import datetime
@@ -9,6 +10,8 @@ def run_scan(target):
     scanner = SecurityScanner(target)
 
     results = scanner.scan()
+
+    results = enrich_findings(results)
 
     report = {
         "scanner": "PurpleGuardAI",

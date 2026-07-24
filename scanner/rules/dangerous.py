@@ -2,6 +2,7 @@ import ast
 
 
 def check_dangerous_functions(tree, filepath):
+
     findings = []
 
     for node in ast.walk(tree):
@@ -13,10 +14,9 @@ def check_dangerous_functions(tree, filepath):
                 if node.func.id == "eval":
 
                     findings.append({
+                        "id": "PG002",
                         "file": filepath,
-                        "line": node.lineno,
-                        "issue": "Dangerous eval() usage",
-                        "severity": "HIGH"
+                        "line": node.lineno
                     })
 
     return findings

@@ -2,6 +2,7 @@ import ast
 
 
 def check_password(tree, filepath):
+
     findings = []
 
     for node in ast.walk(tree):
@@ -15,10 +16,9 @@ def check_password(tree, filepath):
                     if "password" in target.id.lower():
 
                         findings.append({
+                            "id": "PG001",
                             "file": filepath,
-                            "line": node.lineno,
-                            "issue": "Possible hardcoded password",
-                            "severity": "HIGH"
+                            "line": node.lineno
                         })
 
     return findings
