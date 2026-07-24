@@ -39,7 +39,24 @@ class TestScanner(unittest.TestCase):
         self.assertIn(
             "PG002",
             ids
-        )
+        )def test_detects_secret(self):
+
+    scanner = SecurityScanner(
+        "tests/vulnerable_app"
+    )
+
+    results = scanner.scan()
+
+    ids = [
+        item["id"]
+        for item in results
+    ]
+
+    self.assertIn(
+        "PG003",
+        ids
+    )
+
 
 
 if __name__ == "__main__":

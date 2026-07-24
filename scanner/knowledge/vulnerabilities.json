@@ -17,5 +17,16 @@
         "priority": "CRITICAL",
         "description": "eval() can execute attacker-controlled code.",
         "recommendation": "Avoid eval() and use safer parsing methods."
-    }
+    },
+
+    "PG003": {
+    "name": "Hardcoded Secret",
+    "category": "Secrets Management",
+    "severity": "HIGH",
+    "score": 8.5,
+    "priority": "HIGH",
+    "description": "Sensitive secrets such as API keys or tokens stored in source code can be exposed.",
+    "recommendation": "Use environment variables or a dedicated secrets manager."
 }
+}
+
