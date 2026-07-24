@@ -1,0 +1,89 @@
+
+    <html>
+    <head>
+        <title>PurpleGuardAI Report</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 40px;
+            }
+
+            h1 {
+                color: purple;
+            }
+
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+            th, td {
+                border: 1px solid #ccc;
+                padding: 8px;
+            }
+
+            th {
+                background: #f2f2f2;
+            }
+        </style>
+    </head>
+
+    <body>
+
+    <h1>PurpleGuardAI Security Report</h1>
+
+    <table>
+
+    <tr>
+        <th>ID</th>
+        <th>File</th>
+        <th>Line</th>
+        <th>Severity</th>
+        <th>Recommendation</th>
+    </tr>
+    
+        <tr>
+            <td>PG001</td>
+            <td>tests/vulnerable_app/app.py</td>
+            <td>1</td>
+            <td>HIGH</td>
+            <td>Use environment variables or a secrets manager.</td>
+        </tr>
+        
+        <tr>
+            <td>PG002</td>
+            <td>tests/vulnerable_app/app.py</td>
+            <td>5</td>
+            <td>HIGH</td>
+            <td>Avoid eval() and use safer parsing methods.</td>
+        </tr>
+        
+        <tr>
+            <td>PG003</td>
+            <td>tests/vulnerable_app/secrets.py</td>
+            <td>1</td>
+            <td>HIGH</td>
+            <td>Use environment variables or a dedicated secrets manager.</td>
+        </tr>
+        
+        <tr>
+            <td>PG003</td>
+            <td>tests/vulnerable_app/secrets.py</td>
+            <td>2</td>
+            <td>HIGH</td>
+            <td>Use environment variables or a dedicated secrets manager.</td>
+        </tr>
+        
+        <tr>
+            <td>PG004</td>
+            <td>tests/vulnerable_app/sql_test.py</td>
+            <td>3</td>
+            <td>HIGH</td>
+            <td>Use parameterized queries or prepared statements.</td>
+        </tr>
+        
+    </table>
+
+    </body>
+    </html>
+    

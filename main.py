@@ -1,3 +1,4 @@
+from scanner.reporting.html_report import generate_html_report
 from scanner.engine import SecurityScanner
 from scanner.reporting import enrich_findings
 import json
@@ -33,7 +34,12 @@ def run_scan(target):
     with open("reports/scan_report.json", "w") as file:
         json.dump(report, file, indent=4)
 
-    print("\nReport saved: reports/scan_report.json")
+        print("\nReport saved: reports/scan_report.json")
+
+    generate_html_report(
+        "reports/scan_report.json",
+        "reports/scan_report.html"
+    )
 
 
 parser = argparse.ArgumentParser(
@@ -48,3 +54,4 @@ parser.add_argument(
 args = parser.parse_args()
 
 run_scan(args.target)
+
