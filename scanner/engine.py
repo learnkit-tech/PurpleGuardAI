@@ -1,8 +1,7 @@
 import os
 import ast
 
-from scanner.rules.password import check_password
-from scanner.rules.dangerous import check_dangerous_functions
+from scanner.rules.registry import RULES
 
 
 class SecurityScanner:
@@ -52,10 +51,8 @@ class SecurityScanner:
             return
 
 
-        self.findings.extend(
-            check_password(tree, filepath)
-        )
+        for rule in RULES:
 
-        self.findings.extend(
-            check_dangerous_functions(tree, filepath)
-        )
+            self.findings.extend(
+                rule["function"](tree, filepath)
+            )

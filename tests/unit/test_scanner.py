@@ -12,14 +12,14 @@ class TestScanner(unittest.TestCase):
 
         results = scanner.scan()
 
-        issues = [
-            item["issue"]
+        ids = [
+            item["id"]
             for item in results
         ]
 
         self.assertIn(
-            "Possible hardcoded password",
-            issues
+            "PG001",
+            ids
         )
 
 
@@ -31,14 +31,14 @@ class TestScanner(unittest.TestCase):
 
         results = scanner.scan()
 
-        issues = [
-            item["issue"]
+        ids = [
+            item["id"]
             for item in results
         ]
 
         self.assertIn(
-            "Dangerous eval() usage",
-            issues
+            "PG002",
+            ids
         )
 
 
