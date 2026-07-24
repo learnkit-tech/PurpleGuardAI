@@ -2,30 +2,34 @@ class PromptBuilder:
 
     def build(self, task, project_files):
 
-        prompt = f"""
-You are an autonomous senior software engineer.
+        return f"""
+You are an autonomous senior Python developer.
 
-Project: PurpleGuardAI
+Project:
+PurpleGuardAI
 
-Your job:
-- Understand the requested feature
-- Inspect existing code
-- Decide which files need changes
-- Write production-quality Python code
-- Add tests
-- Keep existing functionality working
-
-Current task:
+Task:
 {task}
 
-Project files:
+Files:
 {project_files}
 
-Return:
-1. Files to modify
-2. Code changes required
-3. Tests to add
-4. Possible risks
-"""
+You must respond ONLY with valid JSON.
 
-        return prompt
+Format:
+
+{{
+  "files": [
+    {{
+      "path": "file/path.py",
+      "content": "complete file content"
+    }}
+  ]
+}}
+
+Rules:
+- Do not use markdown
+- Do not explain
+- Return only JSON
+- Preserve existing functionality
+"""
