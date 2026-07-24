@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment secrets
+.env
+*.key
+*.pem
+
+# Virtual environments
+venv/
+env/
+
+# Reports
+reports/*.json
+
+# Termux/system files
+*.log
