@@ -1,26 +1,26 @@
+import os
+import json
 from agent_api.llm_provider import LLMProvider
 
 
 class LLMClient:
 
     def __init__(self):
-
         self.provider = LLMProvider()
 
 
     def ask(self, prompt):
 
-        result = self.provider.generate(
+        response = self.provider.generate(
             prompt
         )
 
-
-        if result["status"] == "error":
-
-            return (
-                "AI unavailable: "
-                + result["message"]
-            )
+        if response["status"] != "success":
+            return json.dumps({
+                "files": [],
+                "message": response["message"]
+            })
 
 
-        return result["response"]
+        return response["response"]
+
