@@ -5,36 +5,38 @@ class ChangeManager:
 
     def apply(self, change):
 
-        print("\nChange Manager")
+        if change["status"] != "ready":
 
-        if change.get("file") is None:
-            return {
-                "status": "waiting",
-                "message": "No file change generated yet."
-            }
+            return change
 
 
-        directory = os.path.dirname(
-            change["file"]
-        )
-
-        if directory:
-            os.makedirs(
-                directory,
-                exist_ok=True
-            )
+        written = []
 
 
-        with open(
-            change["file"],
-            "w"
-        ) as file:
-            file.write(
-                change["content"]
-            )
+        for file_change in change["files"]:
+
+            path = file_change["path"]
+            content = file_change["content"]
+
+
+            directory = os.path.dirname(path)
+
+            if directory:
+                os.makedirs(
+                    directory,
+                    exist_ok=True
+                )
+
+
+            with open(path, "w") as file:
+                file.write(content)
+
+
+            written.append(path)
 
 
         return {
             "status": "completed",
-            "file": change["file"]
+            "files": written
         }
+

@@ -2,11 +2,11 @@ from dev_agent.planner import get_next_task
 from dev_agent.memory import save_memory, load_memory
 from agent_api.llm_client import LLMClient
 from dev_agent.decision import DecisionEngine
-from dev_agent.task_runner import TaskRunner
 from dev_agent.prompt_builder import PromptBuilder
 from dev_agent.code_generator import CodeGenerator
 from dev_agent.change_manager import ChangeManager
 from dev_agent.git_manager import GitManager
+from dev_agent.self_corrector import SelfCorrector
 
 
 class DeveloperAgent:
@@ -15,11 +15,11 @@ class DeveloperAgent:
 
         self.ai = LLMClient()
         self.decision = DecisionEngine()
-        self.runner = TaskRunner()
         self.prompt_builder = PromptBuilder()
         self.generator = CodeGenerator()
         self.changes = ChangeManager()
         self.git = GitManager()
+        self.corrector = SelfCorrector()
         self.memory = load_memory()
 
 
@@ -32,14 +32,11 @@ class DeveloperAgent:
             return
 
 
-        print("Current task:")
+        print("Task:")
         print(task["task"])
 
 
-        checkpoint = self.git.checkpoint()
-
-        print("\nCheckpoint:")
-        print(checkpoint)
+        self.git.checkpoint()
 
 
         files = self.decision.execute_plan(
@@ -67,19 +64,34 @@ class DeveloperAgent:
         )
 
 
-        result = self.changes.apply(change)
-
-        print("\nChange result:")
-        print(result)
-
-
-        tests = self.runner.run(
-            task["task"]
+        result = self.changes.apply(
+            change
         )
 
 
-        print("\nTests:")
-        print(tests)
+        print("Change:")
+        print(result)
+
+
+        tests = self.corrector.run_tests()
+
+        analysis = self.corrector.analyze(
+            tests
+        )
+
+
+        print("Test result:")
+        print(analysis)
+
+
+        if not analysis["success"]:
+
+            fix = self.corrector.create_fix_task(
+                analysis["message"]
+            )
+
+            print("Fix task created:")
+            print(fix)
 
 
         self.memory["last_task"] = task["task"]
