@@ -1,6 +1,13 @@
 from dev_agent.loop import DeveloperAgent
 
 
-agent = DeveloperAgent()
+def main():
 
-agent.run_once()
+    agent = DeveloperAgent()
+
+    agent.run_once()
+
+
+if __name__ == "__main__":
+
+    main()
