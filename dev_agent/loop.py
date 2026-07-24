@@ -23,11 +23,21 @@ class DeveloperAgent:
         self.memory = load_memory()
 
 
-    def run_once(self):
+    def run_once(self, provided_task=None):
 
-        task = get_next_task()
+        if provided_task:
+
+            task = {
+                "task": provided_task
+            }
+
+        else:
+
+            task = get_next_task()
+
 
         if not task:
+
             print("No pending tasks.")
             return
 
@@ -74,6 +84,7 @@ class DeveloperAgent:
 
 
         tests = self.corrector.run_tests()
+
 
         analysis = self.corrector.analyze(
             tests

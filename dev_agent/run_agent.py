@@ -1,13 +1,24 @@
+import sys
+
 from dev_agent.loop import DeveloperAgent
 
 
-def main():
+def main(task=None):
 
     agent = DeveloperAgent()
 
-    agent.run_once()
+    if task:
+        agent.run_once(task)
+    else:
+        agent.run_once()
 
 
 if __name__ == "__main__":
 
-    main()
+    task = None
+
+    if len(sys.argv) > 1:
+        task = sys.argv[1]
+
+    main(task)
+

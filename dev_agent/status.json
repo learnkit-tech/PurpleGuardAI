@@ -1,3 +1,4 @@
 {
-    "status": "running"
+    "status": "building",
+    "task": "Add SARIF security report output"
 }
