@@ -1,5 +1,4 @@
 import os
-import ast
 
 from scanner.rules.registry import RULES
 
@@ -42,17 +41,9 @@ class SecurityScanner:
     def scan_python_file(self, filepath):
 
         with open(filepath, "r", errors="ignore") as f:
-            source = f.read()
-
-        try:
-            tree = ast.parse(source)
-
-        except SyntaxError:
-            return
-
+            lines = f.readlines()
 
         for rule in RULES:
-
             self.findings.extend(
-                rule["function"](tree, filepath)
+                rule.check(filepath, lines)
             )

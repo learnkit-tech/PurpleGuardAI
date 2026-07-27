@@ -1,30 +1,33 @@
 import ast
+from scanner.rules.base import Rule
 
 
-def check_secrets(tree, filepath):
+class HardcodedSecretRule(Rule):
+    id = "PG003"
+    name = "Hardcoded Secret"
+    severity = "HIGH"
+    category = "Secrets Management"
 
-    findings = []
+    def check(self, filepath, lines):
+        findings = []
 
-    for node in ast.walk(tree):
+        tree = ast.parse("".join(lines))
 
-        if isinstance(node, ast.Assign):
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        name = target.id.upper()
 
-            for target in node.targets:
+                        if any(word in name for word in [
+                            "API_KEY",
+                            "SECRET",
+                            "TOKEN"
+                        ]):
+                            findings.append({
+                                "id": self.id,
+                                "file": filepath,
+                                "line": node.lineno
+                            })
 
-                if isinstance(target, ast.Name):
-
-                    name = target.id.upper()
-
-                    if any(word in name for word in [
-                        "API_KEY",
-                        "SECRET",
-                        "TOKEN"
-                    ]):
-
-                        findings.append({
-                            "id": "PG003",
-                            "file": filepath,
-                            "line": node.lineno
-                        })
-
-    return findings
+        return findings

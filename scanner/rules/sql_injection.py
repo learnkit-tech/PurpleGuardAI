@@ -1,37 +1,39 @@
 import ast
+from scanner.rules.base import Rule
 
 
-def check_sql_injection(tree, filepath):
+class SQLInjectionRule(Rule):
 
-    findings = []
+    id = "PG004"
+    name = "SQL Injection"
+    severity = "CRITICAL"
+    category = "Injection"
 
-    for node in ast.walk(tree):
+    def check(self, filepath, lines):
 
-        if isinstance(node, ast.BinOp):
+        findings = []
 
-            if isinstance(node.op, ast.Add):
+        tree = ast.parse("".join(lines))
 
-                left = node.left
+        for node in ast.walk(tree):
 
-                if isinstance(left, ast.Constant):
+            if isinstance(node, ast.Assign):
 
-                    if isinstance(left.value, str):
+                if isinstance(node.value, ast.BinOp):
 
-                        sql_words = [
-                            "SELECT",
-                            "INSERT",
-                            "UPDATE",
-                            "DELETE"
-                        ]
+                    if isinstance(node.value.op, ast.Add):
 
-                        text = left.value.upper()
+                        left = node.value.left
 
-                        if any(word in text for word in sql_words):
-
+                        if (
+                            isinstance(left, ast.Constant)
+                            and isinstance(left.value, str)
+                            and "select" in left.value.lower()
+                        ):
                             findings.append({
-                                "id": "PG004",
+                                "id": self.id,
                                 "file": filepath,
                                 "line": node.lineno
                             })
 
-    return findings
+        return findings

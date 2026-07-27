@@ -1,24 +1,28 @@
 import ast
+from scanner.rules.base import Rule
 
 
-def check_password(tree, filepath):
+class HardcodedPasswordRule(Rule):
+    id = "PG001"
+    name = "Hardcoded Password"
+    severity = "HIGH"
+    category = "Secrets Management"
 
-    findings = []
+    def check(self, filepath, lines):
+        findings = []
 
-    for node in ast.walk(tree):
+        tree = ast.parse("".join(lines))
 
-        if isinstance(node, ast.Assign):
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        if "password" in target.id.lower():
+                            findings.append({
+                                "id": self.id,
+                                "file": filepath,
+                                "line": node.lineno
+                            })
 
-            for target in node.targets:
+        return findings
 
-                if isinstance(target, ast.Name):
-
-                    if "password" in target.id.lower():
-
-                        findings.append({
-                            "id": "PG001",
-                            "file": filepath,
-                            "line": node.lineno
-                        })
-
-    return findings
