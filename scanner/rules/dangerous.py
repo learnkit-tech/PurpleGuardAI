@@ -11,7 +11,8 @@ class DangerousEvalRule(Rule):
     def check(self, filepath, lines):
         findings = []
 
-        tree = ast.parse("".join(lines))
+        source = "".join(lines)
+        tree = ast.parse(source)
 
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
@@ -20,8 +21,8 @@ class DangerousEvalRule(Rule):
                         findings.append({
                             "id": self.id,
                             "file": filepath,
-                            "line": node.lineno
+                            "line": node.lineno,
+                            "code": ast.get_source_segment(source, node),
                         })
 
         return findings
-

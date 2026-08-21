@@ -1,7 +1,9 @@
+from scanner.patches.summary import generate_patch_summary
 from scanner.reporting.html_report import generate_html_report
 from scanner.engine import SecurityScanner
-from scanner.reporting import enrich_findings
+from scanner.reporting import generate_report
 from scanner.filtering import filter_by_severity
+from scanner.remediation.patcher import CodePatcher
 import json
 import argparse
 from datetime import datetime
@@ -13,26 +15,46 @@ def run_scan(target, generate_json=True, generate_html=True, severity=None):
 
     results = scanner.scan()
 
-    results = enrich_findings(results)
+    report = generate_report(results)
 
     if severity:
-        results = filter_by_severity(results, severity)
+        report["findings"] = filter_by_severity(
+            report["findings"],
+            severity
+        )
 
-    report = {
+    patcher = CodePatcher()
+
+    for finding in report["findings"]:
+        finding["patch"] = patcher.create_patch(finding)
+
+    report.update({
         "scanner": "PurpleGuardAI",
         "version": "0.1",
         "timestamp": str(datetime.now()),
-        "target": target,
-        "findings": results
-    }
+        "target": target
+    })
 
     print("\nPurpleGuardAI Security Report")
     print("----------------------------")
 
-    if not results:
-        print("No vulnerabilities found.")
+    analysis = report["analysis"]
 
-    for item in results:
+    print("\nRisk Assessment")
+    print("----------------")
+    print("Risk Score:", analysis["risk_score"])
+    print("Overall Risk:", analysis["overall_risk"])
+
+    print("\nAttack Paths")
+    print("-------------")
+
+    for path in analysis["attack_paths"]:
+        print("-", path)
+
+    print("\nFindings")
+    print("--------")
+
+    for item in report["findings"]:
         print(item)
 
     if generate_json:
@@ -46,6 +68,12 @@ def run_scan(target, generate_json=True, generate_html=True, severity=None):
             "reports/scan_report.json",
             "reports/scan_report.html"
         )
+
+    patch_summary = generate_patch_summary()
+
+    print("\nPatch Summary")
+    print("-------------")
+    print(patch_summary)
 
 
 parser = argparse.ArgumentParser(
@@ -75,6 +103,7 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
+
 
 run_scan(
     args.target,

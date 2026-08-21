@@ -1,4 +1,5 @@
-password = "admin123"
+import os
+password = os.getenv("APP_PASSWORD")
 
 
 def run(user_input):

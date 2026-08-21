@@ -1,0 +1,80 @@
+from pathlib import Path
+
+from scanner.engine import SecurityScanner
+from scanner.risk import RiskAnalyzer
+
+from scanner.analyzer.language_detector import detect_languages
+from scanner.analyzer.framework_detector import detect_framework
+from scanner.analyzer.dependency_analyzer import analyze_dependencies
+from scanner.analyzer.attack_surface import discover_attack_surface
+
+from scanner.reporting import enrich_findings
+from scanner.remediation.workflow import RemediationWorkflow
+
+class DeveloperSession:
+    """
+    Security workspace for an actively developed project.
+
+    Coordinates existing PurpleGuard components without replacing
+    the scanner, reporting, risk analysis, or remediation systems.
+    """
+
+    def __init__(self, project_path):
+        self.project_path = str(Path(project_path).resolve())
+
+        self.scanner = SecurityScanner(self.project_path)
+        self.risk_analyzer = RiskAnalyzer()
+        self.remediation = RemediationWorkflow(self.project_path)
+
+        self.last_findings = []
+        self.last_report = None
+
+    def analyze(self):
+        """Understand the project structure."""
+        project_path = Path(self.project_path)
+
+        return {
+            "languages": detect_languages(project_path),
+            "framework": detect_framework(project_path),
+            "dependencies": analyze_dependencies(project_path),
+            "attack_surface": discover_attack_surface(project_path)
+        }
+
+    def scan(self):
+        """Run the PurpleGuard vulnerability scanner."""
+        raw_findings = self.scanner.scan()
+
+        findings = enrich_findings(raw_findings)
+        analysis = self.risk_analyzer.analyze(findings)
+
+        self.last_findings = findings
+
+        self.last_report = {
+            "project": self.project_path,
+            "findings": findings,
+            "analysis": analysis
+        }
+
+        return self.last_report
+
+    def propose_fix(self, finding):
+        """Generate a remediation proposal requiring approval."""
+        return self.remediation.propose(finding)
+
+    def apply_fix(self, finding, approved=False):
+        """Apply an approved remediation and verify it."""
+        return self.remediation.apply(
+            finding,
+            approved=approved
+        )
+
+    def explain_fix(self, finding, patch_result):
+        """Explain a remediation result."""
+        return self.remediation.explain(
+            finding,
+            patch_result
+        )
+
+    def rescan(self):
+        """Re-run the security scan after changes."""
+        return self.scan()

@@ -37,5 +37,15 @@
         "priority": "CRITICAL",
         "description": "User-controlled data combined directly with SQL queries can allow attackers to manipulate database commands.",
         "recommendation": "Use parameterized queries or prepared statements."
+     },
+    "PG005": {
+        "name": "Command Injection",
+        "category": "Command Injection",
+        "severity": "CRITICAL",
+        "score": 9.5,
+        "priority": "CRITICAL",
+        "description": "Unsafely executing system commands can allow attacker-controlled input to execute arbitrary operating-system commands.",
+        "recommendation": "Avoid shell execution with untrusted input. Use safe subprocess APIs with argument lists and validate inputs."
+
     }
 }

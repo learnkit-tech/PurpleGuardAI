@@ -25,9 +25,10 @@ class HardcodedSecretRule(Rule):
                             "TOKEN"
                         ]):
                             findings.append({
-                                "id": self.id,
-                                "file": filepath,
-                                "line": node.lineno
-                            })
+    "id": self.id,
+    "file": filepath,
+    "line": node.lineno,
+    "code": ast.get_source_segment("".join(lines), node),
+})
 
         return findings
