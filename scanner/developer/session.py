@@ -87,12 +87,8 @@ class DeveloperSession:
         Workflow:
             scan -> select finding -> propose -> approve/apply
             -> verify -> rescan
-
-        By default this method never modifies source code because
-        approval is required explicitly.
         """
 
-        # Step 1: scan the project.
         report = self.scan()
         findings = report.get("findings", [])
 
@@ -103,7 +99,6 @@ class DeveloperSession:
                 "scan": report
             }
 
-        # Step 2: select a finding.
         finding = None
 
         if finding_id is not None:
@@ -117,15 +112,14 @@ class DeveloperSession:
                     "status": "FINDING_NOT_FOUND",
                     "finding_id": finding_id,
                     "available_findings": [
-                        item.get("id") for item in findings
+                        item.get("id")
+                        for item in findings
                     ],
                     "scan": report
                 }
         else:
-            # Use the first finding when no ID is supplied.
             finding = findings[0]
 
-        # Step 3: generate a remediation proposal.
         proposal = self.propose_fix(finding)
 
         if proposal.get("status") != "PROPOSED":
@@ -136,7 +130,6 @@ class DeveloperSession:
                 "scan": report
             }
 
-        # Step 4: require explicit approval.
         if not approved:
             return {
                 "status": "APPROVAL_REQUIRED",
@@ -148,19 +141,16 @@ class DeveloperSession:
                 )
             }
 
-        # Step 5: apply and verify the approved fix.
         patch_result = self.apply_fix(
             finding,
             approved=True
         )
 
-        # Step 6: explain the result.
         explanation = self.explain_fix(
             finding,
             patch_result
         )
 
-        # Step 7: rescan after the modification.
         rescanned = self.rescan()
 
         return {
@@ -170,4 +160,71 @@ class DeveloperSession:
             "patch_result": patch_result,
             "explanation": explanation,
             "rescan": rescanned
+        }
+
+    def secure_all(self, approved=False):
+        """
+        Scan and remediate all detected vulnerabilities.
+
+        Findings are grouped by file so multiple vulnerabilities
+        in the same file are applied together.
+        """
+
+        report = self.scan()
+        findings = report.get("findings", [])
+
+        if not findings:
+            return {
+                "status": "SECURE",
+                "message": "No vulnerabilities were detected.",
+                "fixed": [],
+                "remaining": []
+            }
+
+        if not approved:
+            proposals = [
+                self.propose_fix(finding)
+                for finding in findings
+            ]
+
+            return {
+                "status": "APPROVAL_REQUIRED",
+                "message": (
+                    "Remediation proposals generated. "
+                    "Set approved=True to apply fixes."
+                ),
+                "proposals": proposals
+            }
+
+        apply_result = self.remediation.apply_patches(
+            findings,
+            approved=True
+        )
+
+        final_scan = self.rescan()
+
+        remaining = [
+            item.get("id")
+            for item in final_scan.get("findings", [])
+        ]
+
+        fixed = [
+            finding.get("id")
+            for finding in findings
+            if finding.get("id") not in remaining
+        ]
+
+        return {
+            "status": (
+                "SECURE"
+                if not remaining
+                else "PARTIALLY_SECURED"
+            ),
+            "fixed": fixed,
+            "remaining": remaining,
+            "results": apply_result.get(
+                "results",
+                []
+            ),
+            "final_scan": final_scan
         }

@@ -11,24 +11,41 @@ class HardcodedSecretRule(Rule):
     def check(self, filepath, lines):
         findings = []
 
-        tree = ast.parse("".join(lines))
+        source = "".join(lines)
+        tree = ast.parse(source)
+
+        secret_names = [
+            "API_KEY",
+            "SECRET",
+            "TOKEN"
+        ]
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.Assign):
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        name = target.id.upper()
+            if not isinstance(node, ast.Assign):
+                continue
 
-                        if any(word in name for word in [
-                            "API_KEY",
-                            "SECRET",
-                            "TOKEN"
-                        ]):
-                            findings.append({
-    "id": self.id,
-    "file": filepath,
-    "line": node.lineno,
-    "code": ast.get_source_segment("".join(lines), node),
-})
+            for target in node.targets:
+                if not isinstance(target, ast.Name):
+                    continue
+
+                name = target.id.upper()
+
+                if not any(word in name for word in secret_names):
+                    continue
+
+                # Only flag genuinely hardcoded string values.
+                # os.getenv("TOKEN"), os.environ["TOKEN"], etc.
+                # are not hardcoded secrets.
+                if isinstance(node.value, ast.Constant):
+                    if isinstance(node.value.value, str):
+                        findings.append({
+                            "id": self.id,
+                            "file": filepath,
+                            "line": node.lineno,
+                            "code": ast.get_source_segment(
+                                source,
+                                node
+                            ),
+                        })
 
         return findings

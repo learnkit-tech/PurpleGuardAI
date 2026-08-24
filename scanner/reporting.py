@@ -11,8 +11,8 @@ def enrich_findings(findings):
 
         if vulnerability:
             result = {
-                **finding,
-                **vulnerability
+                **vulnerability,
+                **finding
             }
 
             enriched.append(result)

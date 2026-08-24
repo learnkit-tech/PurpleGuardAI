@@ -66,7 +66,7 @@ class CodePatcher:
                         "import ast"
                     )
 
-            # Backward-compatible fallback.
+            # Fallback: replace the actual detected eval expression.
             detected_code = finding.get("code")
 
             if detected_code and "eval(" in detected_code:
@@ -89,34 +89,14 @@ class CodePatcher:
                         "import ast"
                     )
 
-        # ---------------------------------------------------------
+                 # ---------------------------------------------------------
         # PG003: Hardcoded Secret
         # ---------------------------------------------------------
         if vulnerability_id == "PG003":
 
-            remediation = finding.get("remediation", {})
-
-            before = remediation.get("before")
-            after = remediation.get("after")
-
-            # Use the remediation information if available.
-            if before and after and before in content:
-
-                patched = self._replace_exact(
-                    content,
-                    before,
-                    after
-                )
-
-                if patched is not None:
-                    return self._ensure_import(
-                        patched,
-                        "import os"
-                    )
-
-            # Fallback for findings containing detected code.
             detected_code = finding.get("code")
 
+            # Prefer the actual code detected by the scanner.
             if detected_code:
                 try:
                     tree = ast.parse(detected_code)
@@ -156,6 +136,26 @@ class CodePatcher:
                 except SyntaxError:
                     return None
 
+            # Backward-compatible remediation fallback.
+            remediation = finding.get("remediation", {})
+
+            before = remediation.get("before")
+            after = remediation.get("after")
+
+            if before and after and before in content:
+
+                patched = self._replace_exact(
+                    content,
+                    before,
+                    after
+                )
+
+                if patched is not None:
+                    return self._ensure_import(
+                        patched,
+                        "import os"
+                    )
+
         # ---------------------------------------------------------
         # PG001 / PG004
         # ---------------------------------------------------------
@@ -193,6 +193,91 @@ class CodePatcher:
                 return patched
 
         return None
+
+    def create_patches(self, findings):
+        """
+        Generate combined patches for multiple findings.
+
+        Findings affecting the same file are applied sequentially
+        in memory so their patches are combined into one final
+        patch file instead of overwriting each other.
+        """
+        grouped = {}
+
+        for finding in findings:
+            grouped.setdefault(finding["file"], []).append(finding)
+
+        results = []
+
+        for file_path, file_findings in grouped.items():
+
+            if not os.path.exists(file_path):
+                for finding in file_findings:
+                    results.append({
+                        "file": file_path,
+                        "patch_file": None,
+                        "patch": "",
+                        "status": "FILE_NOT_FOUND"
+                    })
+                continue
+
+            with open(file_path, "r") as file:
+                original_content = file.read()
+
+            current_content = original_content
+            successful = True
+
+            for finding in file_findings:
+                fixed_content = self._generate_actual_fix(
+                    finding,
+                    current_content
+                )
+
+                if fixed_content is None:
+                    successful = False
+                    break
+
+                current_content = fixed_content
+
+            if not successful or current_content == original_content:
+                for finding in file_findings:
+                    results.append({
+                        "file": file_path,
+                        "patch_file": None,
+                        "patch": "",
+                        "status": "NO_PATCH"
+                    })
+                continue
+
+            patch = generate_diff(
+                original_content,
+                current_content
+            )
+
+            os.makedirs(
+                "reports/patches",
+                exist_ok=True
+            )
+
+            patch_name = os.path.basename(file_path) + ".patch"
+            patch_path = os.path.join(
+                "reports",
+                "patches",
+                patch_name
+            )
+
+            with open(patch_path, "w") as file:
+                file.write(patch)
+
+            for finding in file_findings:
+                results.append({
+                    "file": file_path,
+                    "patch_file": patch_path,
+                    "patch": patch,
+                    "status": "READY"
+                })
+
+        return results
 
     def create_patch(self, finding):
         """

@@ -13,6 +13,93 @@ class RemediationWorkflow:
         self.patcher = CodePatcher()
         self.verifier = VerificationEngine()
 
+    def apply_patches(self, findings, approved=False):
+     """
+     Apply grouped remediation patches safely.
+
+     Findings belonging to the same file are combined into one
+     in-memory transformation before the file is modified.
+     """
+
+     if not approved:
+         return {
+             "status": "REJECTED",
+             "message": "Approval is required before applying fixes."
+         }
+
+     results = []
+
+     grouped = {}
+
+     for finding in findings:
+         grouped.setdefault(
+             finding["file"],
+             []
+         ).append(finding)
+
+     for file_path, file_findings in grouped.items():
+
+         if not os.path.exists(file_path):
+             results.append({
+                 "file": file_path,
+                 "status": "FILE_NOT_FOUND"
+             })
+             continue
+
+         with open(file_path, "r") as file:
+             original = file.read()
+
+         current = original
+         successful = True
+
+         for finding in file_findings:
+             fixed = self.patcher._generate_actual_fix(
+                 finding,
+                 current
+             )
+
+             if fixed is None:
+                 successful = False
+                 break
+
+             current = fixed
+
+         if not successful:
+             results.append({
+                 "file": file_path,
+                 "status": "FAILED"
+             })
+             continue
+
+         if current == original:
+             results.append({
+                 "file": file_path,
+                 "status": "NO_CHANGE"
+             })
+             continue
+
+         backup_path = file_path + ".purpleguard.bak"
+         shutil.copy2(file_path, backup_path)
+
+         with open(file_path, "w") as file:
+             file.write(current)
+
+         results.append({
+             "file": file_path,
+             "status": "APPLIED",
+             "backup": backup_path,
+             "findings": [
+                 finding.get("id")
+                 for finding in file_findings
+             ]
+         })
+
+     return {
+         "status": "APPLIED",
+         "results": results
+     }
+
+
     def propose(self, finding):
         patch = self.patcher.create_patch(finding)
 

@@ -19,15 +19,11 @@ def enrich_findings(findings):
         if vulnerability:
 
             result = {
-    "id": finding["id"],
-    "file": finding["file"],
-    "line": finding["line"],
     **vulnerability,
+    **finding,
     "remediation": remediation_engine.generate_fix(
         {
-            "id": finding["id"],
-            "file": finding["file"],
-            "line": finding["line"],
+            **finding,
             "name": vulnerability["name"]
         }
     )
