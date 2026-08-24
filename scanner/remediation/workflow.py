@@ -100,6 +100,41 @@ class RemediationWorkflow:
      }
 
 
+    def rollback(self, file_path):
+        """
+        Restore a source file from its PurpleGuard backup.
+
+        The backup is preserved after restoration so the operation
+        remains reversible.
+        """
+
+        file_path = os.path.abspath(file_path)
+        backup_path = file_path + ".purpleguard.bak"
+
+        if not os.path.exists(backup_path):
+            return {
+                "status": "BACKUP_NOT_FOUND",
+                "file": file_path,
+                "message": (
+                    "No PurpleGuard backup exists for this file."
+                )
+            }
+
+        shutil.copy2(
+            backup_path,
+            file_path
+        )
+
+        return {
+            "status": "ROLLED_BACK",
+            "file": file_path,
+            "backup": backup_path,
+            "message": (
+                "Original source restored from "
+                "PurpleGuard backup."
+            )
+        }
+
     def propose(self, finding):
         patch = self.patcher.create_patch(finding)
 

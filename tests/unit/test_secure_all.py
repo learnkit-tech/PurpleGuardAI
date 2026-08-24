@@ -129,6 +129,60 @@ class TestSecureAll(unittest.TestCase):
             []
         )
 
+    def test_rollback_restores_vulnerable_source(self):
+            session = DeveloperSession(self.project)
+
+            result = session.secure_all(
+                approved=True
+            )
+
+            self.assertEqual(
+                result["status"],
+                "SECURE"
+            )
+
+            secure_scan = session.scan()
+
+            self.assertEqual(
+                secure_scan["findings"],
+                []
+            )
+
+            secrets_file = self.project / "secrets.py"
+
+            rollback_result = session.remediation.rollback(
+                secrets_file
+            )
+
+            self.assertEqual(
+                rollback_result["status"],
+                "ROLLED_BACK"
+            )
+
+            restored = secrets_file.read_text()
+
+            self.assertIn(
+                "sk_live_example_key",
+                restored
+            )
+
+            self.assertIn(
+                "example_token",
+                restored
+            )
+
+            vulnerable_scan = session.scan()
+
+            pg003 = [
+                finding
+                for finding in vulnerable_scan["findings"]
+                if finding["id"] == "PG003"
+            ]
+
+            self.assertEqual(
+                len(pg003),
+                2
+            )
 
 if __name__ == "__main__":
     unittest.main()
