@@ -156,15 +156,24 @@ def run_secure(target, approved=False):
     print("------------------")
     print("Status:", result["status"])
 
-    print(
-        "Fixed:",
-        result["fixed"]
-    )
+    print("\nFixed")
 
-    print(
-        "Remaining:",
-        result["remaining"]
-    )
+    for finding in findings:
+        finding_id = finding["id"]
+
+        if finding_id in result["fixed"]:
+            print(
+                f'✓ {finding_id}  '
+                f'{finding["name"]}'
+            )
+
+    if result["remaining"]:
+        print("\nRemaining")
+
+        for finding_id in result["remaining"]:
+            print(
+                f'⚠️ {finding_id}'
+            )
 
     print("\nVerification")
 
@@ -180,7 +189,6 @@ def run_secure(target, approved=False):
             "remain."
         )
         print("\nSTATUS: PARTIALLY SECURED")
-
 
 parser = argparse.ArgumentParser(
     description="PurpleGuardAI Security Scanner"
