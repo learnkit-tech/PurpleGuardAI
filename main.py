@@ -137,9 +137,7 @@ def run_secure(target, approved=False):
 
     if not approved:
         print("\n⚠️ Approval required.")
-        print(
-            "No files were modified."
-        )
+        print("No files were modified.")
         print(
             "Run again with "
             "--approve to apply remediation."
@@ -190,6 +188,39 @@ def run_secure(target, approved=False):
         )
         print("\nSTATUS: PARTIALLY SECURED")
 
+    return result
+
+
+def run_rollback(target):
+    print("\n🛡️ PurpleGuardAI Rollback")
+    print("=========================")
+
+    session = DeveloperSession(target)
+
+    print(
+        f"\nRestoring: {target}"
+    )
+
+    result = session.remediation.rollback(
+        target
+    )
+
+    if result["status"] == "ROLLED_BACK":
+        print("\n✓ Original source restored.")
+        print("✓ Backup preserved.")
+        print("\nSTATUS: ROLLED BACK")
+    else:
+        print("\n⚠️ Rollback failed.")
+        print(
+            result.get(
+                "message",
+                "Backup not found."
+            )
+        )
+
+    return result
+
+
 parser = argparse.ArgumentParser(
     description="PurpleGuardAI Security Scanner"
 )
@@ -197,6 +228,11 @@ parser = argparse.ArgumentParser(
 subparsers = parser.add_subparsers(
     dest="command"
 )
+
+
+# -------------------------
+# SCAN COMMAND
+# -------------------------
 
 scan_parser = subparsers.add_parser(
     "scan",
@@ -225,6 +261,11 @@ scan_parser.add_argument(
     help="Filter findings by minimum severity"
 )
 
+
+# -------------------------
+# SECURE COMMAND
+# -------------------------
+
 secure_parser = subparsers.add_parser(
     "secure",
     help="Scan and remediate a project"
@@ -241,6 +282,25 @@ secure_parser.add_argument(
     help="Approve remediation and modify files"
 )
 
+
+# -------------------------
+# ROLLBACK COMMAND
+# -------------------------
+
+rollback_parser = subparsers.add_parser(
+    "rollback",
+    help="Restore a file from its PurpleGuard backup"
+)
+
+rollback_parser.add_argument(
+    "target",
+    help="File to restore"
+)
+
+
+# -------------------------
+# COMMAND DISPATCH
+# -------------------------
 
 args = parser.parse_args()
 
@@ -265,6 +325,12 @@ elif args.command == "secure":
     run_secure(
         args.target,
         approved=args.approve
+    )
+
+elif args.command == "rollback":
+
+    run_rollback(
+        args.target
     )
 
 else:
