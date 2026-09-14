@@ -18,6 +18,9 @@ class HackerReverification:
 
         "validate_calculator":
             "validate_calculator",
+
+        "validate_path_traversal":
+            "validate_path_traversal",
     }
 
     def __init__(self, base_url):

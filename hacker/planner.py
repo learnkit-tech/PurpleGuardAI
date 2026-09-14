@@ -15,6 +15,7 @@ class AttackPlanner:
     VALIDATORS = {
         "SQL_INJECTION": "validate_sql_behavior",
         "CODE_EXECUTION": "validate_calculator",
+        "PATH_TRAVERSAL": "validate_path_traversal",
     }
 
     def plan(self, attack_paths):

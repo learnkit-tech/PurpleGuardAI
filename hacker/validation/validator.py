@@ -155,9 +155,50 @@ class LocalAttackValidator:
             ),
         }
 
+    def validate_path_traversal(self):
+
+        """
+        Controlled path-traversal validation against the local
+        deliberately vulnerable /read endpoint.
+
+        Requests a file outside the endpoint's intended
+        directory and checks for a unique marker string that
+        only exists in that file. Proves the escape actually
+        works rather than just assuming it from the code shape.
+        """
+
+        marker = "PURPLEGUARD_SECRET_MARKER"
+
+        result = self.request(
+            "/read",
+            {
+                "file": "../secret.txt"
+            },
+        )
+
+        body = result.get("body", "")
+
+        validated = marker in body
+
+        return {
+            "attack": "PATH_TRAVERSAL",
+            "payload": "../secret.txt",
+            "request": result,
+            "validated": validated,
+            "evidence": (
+                "Server returned contents of a file "
+                "outside the intended directory."
+                if validated
+                else
+                "Controlled input did not demonstrate "
+                "a confirmed path traversal."
+            ),
+        }
+
     def validate_all(self):
 
         return {
             "calculator": self.validate_calculator(),
             "sql": self.validate_sql_behavior(),
+            "path_traversal": self.validate_path_traversal(),
         }

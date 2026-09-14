@@ -1,0 +1,48 @@
+from pathlib import Path
+
+APP = '''from pathlib import Path
+from flask import Flask, request
+import sqlite3
+
+app = Flask(__name__)
+
+
+def search_user():
+    username = request.args.get("username")
+
+    query = (
+        "SELECT * FROM users WHERE username='"
+        + username
+        + "'"
+    )
+
+    connection = sqlite3.connect(
+        Path(__file__).resolve().parent / "users.db"
+    )
+
+    return connection.execute(query).fetchall()
+
+
+@app.route("/search")
+def search():
+    return {"results": search_user()}
+
+
+@app.route("/calculate")
+def calculate():
+    expression = request.args.get("expression")
+    return {"result": eval(expression)}
+
+
+@app.route("/read")
+def read():
+    filename = request.args.get("file")
+    base_dir = Path(__file__).resolve().parent / "reports"
+    target = base_dir / filename
+    with open(target) as f:
+        return {"content": f.read()}
+'''
+
+Path(__file__).with_name("app.py").write_text(APP)
+
+print("Vulnerable test fixture restored.")

@@ -14,90 +14,159 @@ class RemediationWorkflow:
         self.verifier = VerificationEngine()
 
     def apply_patches(self, findings, approved=False):
-     """
-     Apply grouped remediation patches safely.
+        """
+        Apply grouped remediation patches safely.
 
-     Findings belonging to the same file are combined into one
-     in-memory transformation before the file is modified.
-     """
+        Findings belonging to the same file are combined into one
+        in-memory transformation before the file is modified.
 
-     if not approved:
-         return {
-             "status": "REJECTED",
-             "message": "Approval is required before applying fixes."
-         }
+        Each applied change records the original source, updated source,
+        generated diff, backup path, patch file, and finding IDs so the
+        frontend can provide a complete engineering change record.
+        """
 
-     results = []
+        if not approved:
+            return {
+                "status": "REJECTED",
+                "message": "Approval is required before applying fixes."
+            }
 
-     grouped = {}
+        results = []
 
-     for finding in findings:
-         grouped.setdefault(
-             finding["file"],
-             []
-         ).append(finding)
+        grouped = {}
 
-     for file_path, file_findings in grouped.items():
+        for finding in findings:
+            grouped.setdefault(
+                finding["file"],
+                []
+            ).append(finding)
 
-         if not os.path.exists(file_path):
-             results.append({
-                 "file": file_path,
-                 "status": "FILE_NOT_FOUND"
-             })
-             continue
+        for file_path, file_findings in grouped.items():
 
-         with open(file_path, "r") as file:
-             original = file.read()
+            file_path = os.path.abspath(file_path)
 
-         current = original
-         successful = True
+            if not os.path.exists(file_path):
+                results.append({
+                    "file": file_path,
+                    "status": "FILE_NOT_FOUND",
+                    "findings": [
+                        finding.get("id")
+                        for finding in file_findings
+                    ]
+                })
+                continue
 
-         for finding in file_findings:
-             fixed = self.patcher._generate_actual_fix(
-                 finding,
-                 current
-             )
+            with open(file_path, "r") as file:
+                original = file.read()
 
-             if fixed is None:
-                 successful = False
-                 break
+            current = original
+            successful = True
 
-             current = fixed
+            for finding in file_findings:
 
-         if not successful:
-             results.append({
-                 "file": file_path,
-                 "status": "FAILED"
-             })
-             continue
+                fixed = self.patcher._generate_actual_fix(
+                    finding,
+                    current
+                )
 
-         if current == original:
-             results.append({
-                 "file": file_path,
-                 "status": "NO_CHANGE"
-             })
-             continue
+                if fixed is None:
+                    successful = False
+                    break
 
-         backup_path = file_path + ".purpleguard.bak"
-         shutil.copy2(file_path, backup_path)
+                current = fixed
 
-         with open(file_path, "w") as file:
-             file.write(current)
+            if not successful:
+                results.append({
+                    "file": file_path,
+                    "status": "FAILED",
+                    "findings": [
+                        finding.get("id")
+                        for finding in file_findings
+                    ],
+                    "original_source": original,
+                    "updated_source": current,
+                    "patch": ""
+                })
+                continue
 
-         results.append({
-             "file": file_path,
-             "status": "APPLIED",
-             "backup": backup_path,
-             "findings": [
-                 finding.get("id")
-                 for finding in file_findings
-             ]
-         })
+            if current == original:
+                results.append({
+                    "file": file_path,
+                    "status": "NO_CHANGE",
+                    "findings": [
+                        finding.get("id")
+                        for finding in file_findings
+                    ],
+                    "original_source": original,
+                    "updated_source": current,
+                    "patch": ""
+                })
+                continue
 
-     return {
-         "status": "APPLIED",
-         "results": results
-     }
+            # Generate the complete combined diff.
+            from scanner.remediation.diff import generate_diff
+
+            patch = generate_diff(
+                original,
+                current
+            )
+
+            # Store the generated patch on disk.
+            os.makedirs(
+                "reports/patches",
+                exist_ok=True
+            )
+
+            patch_name = (
+                os.path.basename(file_path)
+                + ".patch"
+            )
+
+            patch_path = os.path.abspath(
+                os.path.join(
+                    "reports",
+                    "patches",
+                    patch_name
+                )
+            )
+
+            with open(patch_path, "w") as patch_file:
+                patch_file.write(patch)
+
+            # Create a reversible backup immediately before
+            # modifying the source file.
+            backup_path = (
+                file_path
+                + ".purpleguard.bak"
+            )
+
+            shutil.copy2(
+                file_path,
+                backup_path
+            )
+
+            # Apply the combined transformation.
+            with open(file_path, "w") as file:
+                file.write(current)
+
+            results.append({
+                "file": file_path,
+                "status": "APPLIED",
+                "findings": [
+                    finding.get("id")
+                    for finding in file_findings
+                ],
+                "backup": backup_path,
+                "patch_file": patch_path,
+                "original_source": original,
+                "updated_source": current,
+                "patch": patch
+            })
+
+        return {
+            "status": "APPLIED",
+            "results": results
+        }
 
 
     def rollback(self, file_path):

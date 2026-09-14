@@ -7,6 +7,13 @@ from scanner.remediation.patcher import CodePatcher
 CATEGORY_TO_RULE = {
     "CODE_EXECUTION": "PG002",
     "SQL_INJECTION": "PG004",
+    "PATH_TRAVERSAL": "PG006",
+}
+
+CATEGORY_LABELS = {
+    "CODE_EXECUTION": "Code Injection",
+    "SQL_INJECTION": "Injection",
+    "PATH_TRAVERSAL": "Path Traversal",
 }
 
 
@@ -37,10 +44,9 @@ class HackerRemediationAdapter:
             "id": vulnerability_id,
             "name": finding.title,
             "severity": finding.severity,
-            "category": (
-                "Code Injection"
-                if finding.category == "CODE_EXECUTION"
-                else "Injection"
+            "category": CATEGORY_LABELS.get(
+                finding.category,
+                "Injection"
             ),
             "file": finding.sink_file,
             "line": finding.sink_line,
@@ -263,6 +269,11 @@ class HackerRemediationAdapter:
             "PG004":
                 "Use parameterized queries or prepared statements "
                 "so attacker-controlled input cannot alter SQL structure.",
+
+            "PG006":
+                "Resolve the target path and verify it stays within "
+                "the intended base directory before opening it; "
+                "reject any path that escapes it.",
         }
 
         return recommendations.get(
@@ -284,6 +295,13 @@ class HackerRemediationAdapter:
                 "statement through string construction. The proposed "
                 "fix separates SQL structure from user input by using "
                 "a parameterized query and passing username as a parameter.",
+
+            "PG006":
+                "Attacker-controlled input reaches a file path "
+                "operation without being confined to an allowed "
+                "directory. The proposed fix resolves the final path "
+                "and rejects it if it escapes the intended base "
+                "directory, preventing access to files outside it.",
         }
 
         return explanations.get(

@@ -393,7 +393,7 @@ export default function Home() {
       </header>
 
       <div className="mx-auto flex max-w-7xl">
-        <aside className="hidden w-60 shrink-0 border-r border-white/10 px-4 py-6 lg:block">
+        <aside className="hidden w-60 shrink-0 border-r border-white/10 px-4 py-6 md:block">
           <div className="mb-4 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/30">
             Security workspace
           </div>
@@ -434,8 +434,8 @@ export default function Home() {
           </div>
         </aside>
 
-        <section className="min-w-0 flex-1 px-4 py-5 pb-24 lg:px-8 lg:py-10 lg:pb-10">
-          <div className="mb-5 flex gap-2 overflow-x-auto pb-1 lg:hidden">
+        <section className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-10">
+          <div className="mb-6 flex gap-2 overflow-x-auto pb-1 md:hidden">
             {navigation.map((item) => (
               <button
                 key={item.name}
@@ -472,9 +472,18 @@ export default function Home() {
               </p>
             </div>
 
+            <button
+              onClick={() => runPurpleGuard(false)}
+              disabled={securing}
+              className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {securing
+                ? "PurpleGuard working..."
+                : "Run PurpleGuard"}
+            </button>
           </div>
 
-          <div className="mb-6 overflow-hidden rounded-3xl border border-purple-500/20 bg-gradient-to-br from-purple-500/[0.09] via-white/[0.025] to-transparent shadow-2xl shadow-purple-950/20 p-5 md:p-7">
+          <div className="mb-6 rounded-3xl border border-purple-500/20 bg-purple-500/5 p-5 md:p-7">
             <div className="mb-4">
               <div className="text-lg font-semibold">
                 Authorized security target
@@ -2250,21 +2259,7 @@ function ChangesPanel({
 }: {
   result: SecureResult | null;
 }) {
-  type ChangeRecord = {
-    status?: string;
-    file?: string;
-    finding_id?: string;
-    message?: string;
-    findings?: string[];
-    backup?: string;
-    patch_file?: string;
-    original_source?: string;
-    updated_source?: string;
-    patch?: string;
-  };
-
-  const changes =
-    (result?.remediation?.result?.results || []) as ChangeRecord[];
+  const changes = result?.remediation?.result?.results || [];
 
   const applied = changes.filter(
     (change) => change.status === "APPLIED"
@@ -2293,22 +2288,13 @@ function ChangesPanel({
           </h2>
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-white/40">
-            PurpleGuard records approved remediation operations here,
-            including the source transformation, patch and verification
-            result.
+            PurpleGuard will record remediation operations here after
+            a developer approves a security fix.
           </p>
         </div>
       </div>
     );
   }
-
-  const verificationStatus =
-    result?.verification?.verdict?.status ||
-    result?.status ||
-    "UNKNOWN";
-
-  const verificationPassed =
-    verificationStatus === "SECURITY_VERIFIED";
 
   return (
     <div className="space-y-5">
@@ -2325,55 +2311,40 @@ function ChangesPanel({
             </h2>
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/40">
-              Review exactly what PurpleGuard changed after developer
-              approval, including the before/after source and generated
-              patch.
+              Review the remediation operations performed on the
+              project after developer approval.
             </p>
           </div>
 
-          <div
-            className={`rounded-2xl border px-5 py-4 ${
-              applied.length > 0
-                ? "border-emerald-400/20 bg-emerald-400/[0.05]"
-                : failed.length > 0
-                  ? "border-red-400/20 bg-red-400/[0.05]"
-                  : "border-white/10 bg-white/[0.03]"
-            }`}
-          >
-            <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/35">
+          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.05] px-5 py-4">
+            <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
               Operation status
             </div>
 
-            <div
-              className={`mt-1 text-lg font-semibold ${
-                applied.length > 0
-                  ? "text-emerald-200"
-                  : failed.length > 0
-                    ? "text-red-300"
-                    : "text-white/60"
-              }`}
-            >
+            <div className="mt-1 text-lg font-semibold text-emerald-200">
               {applied.length > 0
-                ? "APPLIED"
-                : failed.length > 0
-                  ? "FAILED"
-                  : noChange.length > 0
-                    ? "NO_CHANGE"
-                    : "UNKNOWN"}
+  ? "APPLIED"
+  : failed.length > 0
+    ? "FAILED"
+    : noChange.length > 0
+      ? "NO_CHANGE"
+      : "UNKNOWN"}
             </div>
           </div>
         </div>
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
           <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/25">
             Files changed
           </div>
+
           <div className="mt-2 text-2xl font-semibold">
             {applied.length}
           </div>
+
           <div className="mt-1 text-[10px] text-white/30">
             Successfully modified
           </div>
@@ -2381,30 +2352,13 @@ function ChangesPanel({
 
         <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
           <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/25">
-            Findings fixed
-          </div>
-          <div className="mt-2 text-2xl font-semibold">
-            {applied.reduce(
-              (total, change) =>
-                total +
-                (Array.isArray(change.findings)
-                  ? change.findings.length
-                  : 0),
-              0
-            )}
-          </div>
-          <div className="mt-1 text-[10px] text-white/30">
-            Security issues addressed
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
-          <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/25">
             Failed
           </div>
+
           <div className="mt-2 text-2xl font-semibold">
             {failed.length}
           </div>
+
           <div className="mt-1 text-[10px] text-white/30">
             Requires investigation
           </div>
@@ -2412,24 +2366,20 @@ function ChangesPanel({
 
         <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
           <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/25">
-            Verification
+            No change
           </div>
-          <div
-            className={`mt-2 text-sm font-semibold ${
-              verificationPassed
-                ? "text-emerald-300"
-                : "text-amber-300"
-            }`}
-          >
-            {verificationStatus}
+
+          <div className="mt-2 text-2xl font-semibold">
+            {noChange.length}
           </div>
+
           <div className="mt-1 text-[10px] text-white/30">
-            Final security verdict
+            Nothing modified
           </div>
         </div>
       </div>
 
-      {/* Change records */}
+      {/* Changes */}
       <div className="space-y-4">
         {changes.map((change, index) => {
           const status = change.status || "UNKNOWN";
@@ -2438,31 +2388,16 @@ function ChangesPanel({
             status === "FAILED" ||
             status === "FILE_NOT_FOUND";
 
-          /*
-           * The backend remediation record now contains richer fields
-           * than the original frontend type. Keep the existing API
-           * contract while safely reading the new engineering fields.
-           */
-          const record = change as typeof change & {
-            findings?: string[];
-            backup?: string;
-            patch_file?: string;
-            original_source?: string;
-            updated_source?: string;
-            patch?: string;
-          };
-
           return (
             <div
               key={`${change.file || "change"}-${index}`}
               className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.025]"
             >
-              {/* Change header */}
               <div className="border-b border-white/10 p-5">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/25">
-                      File modified
+                      File
                     </div>
 
                     <div className="mt-2 break-all font-mono text-sm text-white/75">
@@ -2482,172 +2417,25 @@ function ChangesPanel({
                     {status}
                   </span>
                 </div>
-
-                {Array.isArray(record.findings) &&
-                  record.findings.length > 0 && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {record.findings.map((findingId) => (
-                        <span
-                          key={findingId}
-                          className="rounded-full border border-purple-400/15 bg-purple-500/[0.05] px-3 py-1.5 font-mono text-[9px] font-semibold text-purple-300"
-                        >
-                          {findingId}
-                        </span>
-                      ))}
-                    </div>
-                  )}
               </div>
 
               <div className="space-y-4 p-5">
-                {/* Applied state */}
-                {isApplied && (
-                  <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.04] p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-300">
-                        ✓
-                      </div>
+                {change.finding_id && (
+                  <div className="rounded-2xl border border-purple-400/15 bg-purple-500/[0.04] p-4">
+                    <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-purple-300">
+                      Finding addressed
+                    </div>
 
-                      <div>
-                        <div className="text-xs font-medium text-emerald-200">
-                          Source file modified successfully
-                        </div>
-
-                        <div className="mt-1 text-[10px] leading-5 text-white/35">
-                          PurpleGuard applied the approved remediation
-                          and retained a reversible backup.
-                        </div>
-                      </div>
+                    <div className="mt-2 font-mono text-sm text-white/65">
+                      {change.finding_id}
                     </div>
                   </div>
                 )}
 
-                {/* Backup */}
-                {record.backup && (
+                {change.message && (
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                     <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/25">
-                      Recovery
-                    </div>
-
-                    <div className="mt-2 text-[10px] text-white/35">
-                      Backup preserved before modification.
-                    </div>
-
-                    <div className="mt-3 break-all rounded-xl border border-white/5 bg-white/[0.02] p-3 font-mono text-[10px] text-white/45">
-                      {record.backup}
-                    </div>
-                  </div>
-                )}
-
-                {/* Before / After */}
-                {record.original_source &&
-                  record.updated_source && (
-                    <div className="space-y-3">
-                      <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/25">
-                        Source transformation
-                      </div>
-
-                      <div className="grid gap-3 xl:grid-cols-2">
-                        <details
-                          open
-                          className="overflow-hidden rounded-2xl border border-red-400/10 bg-red-400/[0.025]"
-                        >
-                          <summary className="cursor-pointer border-b border-white/10 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-red-300">
-                            Before — vulnerable source
-                          </summary>
-
-                          <pre className="max-h-[420px] overflow-auto p-4 font-mono text-[10px] leading-5 text-white/45">
-                            {record.original_source}
-                          </pre>
-                        </details>
-
-                        <details
-                          open
-                          className="overflow-hidden rounded-2xl border border-emerald-400/10 bg-emerald-400/[0.025]"
-                        >
-                          <summary className="cursor-pointer border-b border-white/10 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
-                            After — secured source
-                          </summary>
-
-                          <pre className="max-h-[420px] overflow-auto p-4 font-mono text-[10px] leading-5 text-white/55">
-                            {record.updated_source}
-                          </pre>
-                        </details>
-                      </div>
-                    </div>
-                  )}
-
-                {/* Unified diff */}
-                {record.patch && (
-                  <details className="overflow-hidden rounded-2xl border border-purple-400/10 bg-purple-500/[0.025]">
-                    <summary className="cursor-pointer border-b border-white/10 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-purple-300">
-                      View complete patch / diff
-                    </summary>
-
-                    <pre className="max-h-[500px] overflow-auto p-4 font-mono text-[10px] leading-5 text-white/50">
-                      {record.patch}
-                    </pre>
-                  </details>
-                )}
-
-                {/* Patch file */}
-                {record.patch_file && (
-                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                    <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/25">
-                      Generated patch file
-                    </div>
-
-                    <div className="mt-2 break-all font-mono text-[10px] text-white/40">
-                      {record.patch_file}
-                    </div>
-                  </div>
-                )}
-
-                {/* Verification handoff */}
-                <div
-                  className={`rounded-2xl border p-4 ${
-                    verificationPassed
-                      ? "border-emerald-400/15 bg-emerald-400/[0.035]"
-                      : "border-amber-400/15 bg-amber-400/[0.035]"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                        verificationPassed
-                          ? "bg-emerald-400/10 text-emerald-300"
-                          : "bg-amber-400/10 text-amber-300"
-                      }`}
-                    >
-                      {verificationPassed ? "✓" : "!"}
-                    </div>
-
-                    <div>
-                      <div
-                        className={`text-xs font-medium ${
-                          verificationPassed
-                            ? "text-emerald-200"
-                            : "text-amber-200"
-                        }`}
-                      >
-                        {verificationPassed
-                          ? "Security verification passed"
-                          : "Verification requires review"}
-                      </div>
-
-                      <div className="mt-1 text-[10px] leading-5 text-white/35">
-                        {verificationPassed
-                          ? "Static analysis, automated tests and adversarial re-validation established that the approved remediation resolved the confirmed attack paths."
-                          : "PurpleGuard could not establish a complete security verification across every verification layer."}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Failure message */}
-                {isFailed && change.message && (
-                  <div className="rounded-2xl border border-red-400/15 bg-red-400/[0.04] p-4">
-                    <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-red-300">
-                      Operation failed
+                      Operation message
                     </div>
 
                     <p className="mt-2 text-xs leading-5 text-white/45">
@@ -2656,17 +2444,36 @@ function ChangesPanel({
                   </div>
                 )}
 
-                {/* No change */}
-                {status === "NO_CHANGE" && (
-                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                    <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/25">
-                      No source change
+                {isApplied && (
+                  <div className="flex items-center gap-3 rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.04] p-4">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-300">
+                      ✓
                     </div>
 
-                    <p className="mt-2 text-xs leading-5 text-white/40">
-                      PurpleGuard generated no source modification for
-                      this remediation operation.
-                    </p>
+                    <div>
+                      <div className="text-xs font-medium text-emerald-200">
+                        Source file modified successfully
+                      </div>
+
+                      <div className="mt-1 text-[10px] leading-5 text-white/30">
+                        The remediation operation completed. PurpleGuard
+                        should now verify the change through static
+                        analysis, tests and re-validation.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {isFailed && (
+                  <div className="rounded-2xl border border-red-400/15 bg-red-400/[0.04] p-4">
+                    <div className="text-xs font-medium text-red-200">
+                      Remediation requires investigation
+                    </div>
+
+                    <div className="mt-1 text-[10px] leading-5 text-white/30">
+                      PurpleGuard did not successfully modify this file.
+                      The change must not be treated as verified.
+                    </div>
                   </div>
                 )}
               </div>
@@ -2674,9 +2481,35 @@ function ChangesPanel({
           );
         })}
       </div>
+
+      {/* Verification handoff */}
+      <div className="rounded-3xl border border-purple-400/15 bg-purple-500/[0.04] p-6">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-purple-400/10 text-purple-300">
+            ✓
+          </div>
+
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-purple-300">
+              Security verification
+            </div>
+
+            <h3 className="mt-2 text-base font-semibold">
+              A successful patch is not the final verdict.
+            </h3>
+
+            <p className="mt-2 text-xs leading-5 text-white/40">
+              PurpleGuard must rescan the source, run automated tests
+              and re-test the previously confirmed attack before the
+              vulnerability can be considered remediated.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
+
 
 function VerificationPanel({
   result,

@@ -2,6 +2,7 @@ import argparse
 import json
 from datetime import datetime
 
+from scanner.decision.engine import SecurityDecisionEngine
 from scanner.engine import SecurityScanner
 from scanner.reporting import generate_report
 from scanner.reporting.html_report import generate_html_report
@@ -21,6 +22,11 @@ def run_scan(
 
     results = scanner.scan()
     report = generate_report(results)
+   decision_engine = SecurityDecisionEngine()
+
+decision = decision_engine.decide(report)
+
+report["decision"] = decision
 
     if severity:
         report["findings"] = filter_by_severity(
@@ -56,6 +62,23 @@ def run_scan(
     print("---------------")
     print("Risk Score:", analysis["risk_score"])
     print("Overall Risk:", analysis["overall_risk"])
+
+   print("\nSecurity Decision")
+print("-----------------")
+print("Risk:", decision["risk"])
+print("Action:", decision["action"])
+print(
+    "Approval Required:",
+    decision["approval_required"]
+)
+print(
+    "Verification Required:",
+    decision["verification_required"]
+)
+print(
+    "Rollback Available:",
+    decision["rollback_available"]
+)
 
     print("\nFindings")
     print("--------")

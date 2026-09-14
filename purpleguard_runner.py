@@ -3,20 +3,43 @@
 import argparse
 import json
 import os
-import sys
 
 from scanner.engine import SecurityScanner
+from hacker.orchestrator import PurpleGuardSecurityOrchestrator
+
+
+def run_scan(target, task):
+    scanner = SecurityScanner(target)
+
+    findings = scanner.scan()
+
+    return {
+        "agent": "purpleguard",
+        "task": task,
+        "status": "complete",
+        "findings": findings,
+        "count": len(findings)
+    }
+
+
+def run_secure(target, approved):
+    orchestrator = PurpleGuardSecurityOrchestrator(
+        target
+    )
+
+    return orchestrator.run(
+        approved=approved
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="PurpleGuardAI ECC harness"
+        description="PurpleGuardAI security and ECC harness"
     )
 
     parser.add_argument(
         "--cwd",
-        required=True,
-        help="Project directory to scan"
+        help="Project directory"
     )
 
     parser.add_argument(
@@ -25,23 +48,47 @@ def main():
         help="Task from ECC"
     )
 
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=["scan", "secure"],
+        default="scan",
+        help="PurpleGuard operation"
+    )
+
+    parser.add_argument(
+        "--approve",
+        action="store_true",
+        help="Approve source modification during secure mode"
+    )
+
     args = parser.parse_args()
 
-    target = os.path.abspath(args.cwd)
+    if not args.cwd:
+        parser.error("--cwd is required")
 
-    scanner = SecurityScanner(target)
+    target = os.path.abspath(
+        os.path.expanduser(args.cwd)
+    )
 
-    findings = scanner.scan()
+    if args.command == "secure":
+        result = run_secure(
+            target,
+            args.approve
+        )
+    else:
+        result = run_scan(
+            target,
+            args.task
+        )
 
-    result = {
-        "agent": "purpleguard",
-        "task": args.task,
-        "status": "complete",
-        "findings": findings,
-        "count": len(findings)
-    }
-
-    print(json.dumps(result, indent=2))
+    print(
+        json.dumps(
+            result,
+            indent=2,
+            default=str
+        )
+    )
 
 
 if __name__ == "__main__":

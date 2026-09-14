@@ -1,0 +1,649 @@
+"use client";
+
+import { useMemo, useState } from "react";
+
+const API_URL =
+  process.env.NEXT_PUBLIC_PURPLEGUARD_API || "http://127.0.0.1:8000";
+
+type Finding = {
+  id: string;
+  name: string;
+  title?: string;
+  category: string;
+  severity: string;
+  file: string;
+  line: number;
+  code?: string;
+  description?: string;
+};
+
+type ScanResponse = {
+  status: string;
+  target: string;
+  findings: Finding[];
+  count: number;
+};
+
+const navigation = [
+  { name: "Overview", icon: "⌂" },
+  { name: "Scanner", icon: "⌕" },
+  { name: "Findings", icon: "!" },
+  { name: "AI Engineer", icon: "✦" },
+  { name: "Changes", icon: "↗" },
+  { name: "Verification", icon: "✓" },
+  { name: "History", icon: "◷" },
+];
+
+function severityClass(severity: string) {
+  if (severity === "CRITICAL") {
+    return "bg-red-400/10 text-red-300";
+  }
+
+  if (severity === "HIGH") {
+    return "bg-orange-400/10 text-orange-300";
+  }
+
+  if (severity === "MEDIUM") {
+    return "bg-yellow-400/10 text-yellow-300";
+  }
+
+  return "bg-blue-400/10 text-blue-300";
+}
+
+function displayFile(path: string) {
+  const parts = path.split("/");
+  return parts[parts.length - 1] || path;
+}
+
+export default function Home() {
+  const [active, setActive] = useState("Overview");
+  const [connected, setConnected] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [securing, setSecuring] = useState(false);
+  const [secureResult, setSecureResult] = useState<any>(null);
+  const [secureError, setSecureError] = useState("");
+  const [scanError, setScanError] = useState("");
+  const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
+
+  const [target, setTarget] = useState(
+    "/data/data/com.termux/files/home/PurpleGuardAI/tests/vulnerable_app"
+  );
+
+  const [findings, setFindings] = useState<Finding[]>([]);
+  const [lastScanTarget, setLastScanTarget] = useState("");
+
+  async function runScan() {
+    if (!target.trim()) {
+      setScanError("Enter a project path first.");
+      return;
+    }
+
+    setScanning(true);
+    setScanError("");
+
+    try {
+      const response = await fetch(`${API_URL}/scan`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          target: target.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "PurpleGuard could not scan the project.");
+      }
+
+      setFindings(data.findings || []);
+      setLastScanTarget(data.target || target.trim());
+      setConnected(true);
+      setActive("Overview");
+    } catch (error) {
+      setScanError(
+        error instanceof Error
+          ? error.message
+          : "Unable to connect to PurpleGuard API."
+      );
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  const criticalCount = useMemo(
+    () => findings.filter((finding) => finding.severity === "CRITICAL").length,
+    [findings]
+  );
+
+  const highCount = useMemo(
+    () => findings.filter((finding) => finding.severity === "HIGH").length,
+    [findings]
+  );
+
+  const mediumCount = useMemo(
+    () => findings.filter((finding) => finding.severity === "MEDIUM").length,
+    [findings]
+  );
+
+  const securityScore = useMemo(() => {
+    if (findings.length === 0) return 100;
+
+    const deductions = findings.reduce((total, finding) => {
+      if (finding.severity === "CRITICAL") return total + 20;
+      if (finding.severity === "HIGH") return total + 12;
+      if (finding.severity === "MEDIUM") return total + 6;
+      return total + 2;
+    }, 0);
+
+    return Math.max(0, 100 - deductions);
+  }, [findings]);
+
+  const riskLabel =
+    findings.length === 0
+      ? "No known issues"
+      : criticalCount > 0
+        ? "Critical risk"
+        : highCount > 0
+          ? "High risk"
+          : mediumCount > 0
+            ? "Moderate risk"
+            : "Low risk";
+
+  return (
+    <main className="min-h-screen bg-[#08070c] text-white">
+      {/* Top bar */}
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#08070c]/90 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-8">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-fuchsia-500 font-black shadow-lg shadow-purple-500/20">
+              P
+            </div>
+
+            <div>
+              <div className="font-semibold tracking-tight">PurpleGuard</div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+                AI Security Engineer
+              </div>
+            </div>
+          </div>
+
+          <div className="hidden items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/5 px-3 py-1.5 text-xs text-emerald-300 sm:flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            Engine ready
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto flex max-w-7xl">
+        {/* Desktop navigation */}
+        <aside className="hidden w-60 shrink-0 border-r border-white/10 px-4 py-6 md:block">
+          <div className="mb-4 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/30">
+            Workspace
+          </div>
+
+          <nav className="space-y-1">
+            {navigation.map((item) => (
+              <button
+                key={item.name}
+                onClick={() => setActive(item.name)}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
+                  active === item.name
+                    ? "bg-purple-500/15 text-white ring-1 ring-purple-500/20"
+                    : "text-white/50 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <span className="flex w-5 justify-center text-sm">
+                  {item.icon}
+                </span>
+                {item.name}
+              </button>
+            ))}
+          </nav>
+
+          <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
+            <div className="mb-2 text-xs font-medium text-white/40">
+              PROJECT
+            </div>
+
+            <div className="truncate text-sm font-medium">
+              {connected ? displayFile(lastScanTarget) : "PurpleGuardAI"}
+            </div>
+
+            <div className="mt-1 truncate text-xs text-white/35">
+              {connected ? "local · connected" : "master · local"}
+            </div>
+          </div>
+        </aside>
+
+        {/* Main */}
+        <section className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-10">
+          {/* Mobile navigation */}
+          <div className="mb-6 flex gap-2 overflow-x-auto pb-1 md:hidden">
+            {navigation.map((item) => (
+              <button
+                key={item.name}
+                onClick={() => setActive(item.name)}
+                className={`shrink-0 rounded-full px-3 py-2 text-xs ${
+                  active === item.name
+                    ? "bg-purple-500 text-white"
+                    : "bg-white/5 text-white/50"
+                }`}
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
+
+          {/* Header */}
+          <div className="mb-8 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+            <div>
+              <div className="mb-3 flex items-center gap-2 text-xs text-white/40">
+                <span>Workspace</span>
+                <span>/</span>
+                <span className="text-white/70">PurpleGuardAI</span>
+              </div>
+
+              <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+                Security that understands your code.
+              </h1>
+
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/45 md:text-base">
+                PurpleGuard analyzes your project, finds vulnerabilities,
+                reasons about their impact, creates remediation patches, and
+                verifies the result.
+              </p>
+            </div>
+
+            <button
+              onClick={runScan}
+              disabled={scanning}
+              className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {scanning ? "Scanning..." : "Run security scan"}
+            </button>
+          </div>
+
+          {/* Target */}
+          <div className="mb-6 rounded-3xl border border-purple-500/20 bg-gradient-to-br from-purple-500/10 via-white/[0.025] to-transparent p-5 md:p-7">
+            <div className="mb-4">
+              <div className="text-lg font-semibold">
+                Security target
+              </div>
+
+              <p className="mt-1 text-sm text-white/40">
+                PurpleGuard will analyze this local project through the
+                security API.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 md:flex-row">
+              <input
+                value={target}
+                onChange={(event) => setTarget(event.target.value)}
+                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-4 py-3 font-mono text-xs text-white outline-none transition placeholder:text-white/20 focus:border-purple-400/50"
+                placeholder="/path/to/project"
+              />
+
+              <button
+                onClick={runScan}
+                disabled={scanning}
+                className="rounded-xl bg-purple-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-purple-400 disabled:opacity-60"
+              >
+                {scanning ? "Analyzing..." : "Analyze target"}
+              </button>
+            </div>
+
+            {scanError && (
+              <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/5 px-4 py-3 text-xs leading-5 text-red-300">
+                {scanError}
+              </div>
+            )}
+
+            {lastScanTarget && !scanError && (
+              <div className="mt-4 text-xs text-emerald-300">
+                ● Last scan completed · {lastScanTarget}
+              </div>
+            )}
+          </div>
+
+          {/* Security overview */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+              <div className="text-xs uppercase tracking-wider text-white/35">
+                Security score
+              </div>
+
+              <div className="mt-5 flex items-end gap-3">
+                <span className="text-5xl font-semibold tracking-tight">
+                  {securityScore}
+                </span>
+
+                <span className="mb-2 text-sm text-white/30">
+                  / 100
+                </span>
+              </div>
+
+              <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-purple-500 to-fuchsia-400 transition-all"
+                  style={{ width: `${securityScore}%` }}
+                />
+              </div>
+
+              <div className="mt-3 text-xs text-orange-300">
+                {riskLabel}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+              <div className="text-xs uppercase tracking-wider text-white/35">
+                Vulnerabilities
+              </div>
+
+              <div className="mt-5 text-5xl font-semibold tracking-tight">
+                {findings.length}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                {criticalCount > 0 && (
+                  <span className="rounded-full bg-red-400/10 px-2.5 py-1 text-red-300">
+                    {criticalCount} Critical
+                  </span>
+                )}
+
+                {highCount > 0 && (
+                  <span className="rounded-full bg-orange-400/10 px-2.5 py-1 text-orange-300">
+                    {highCount} High
+                  </span>
+                )}
+
+                {mediumCount > 0 && (
+                  <span className="rounded-full bg-yellow-400/10 px-2.5 py-1 text-yellow-300">
+                    {mediumCount} Medium
+                  </span>
+                )}
+
+                {findings.length === 0 && (
+                  <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-emerald-300">
+                    Clean
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+              <div className="text-xs uppercase tracking-wider text-white/35">
+                AI Engineer
+              </div>
+
+              <div className="mt-5 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-500/15 text-purple-300">
+                  ✦
+                </div>
+
+                <div>
+                  <div className="text-sm font-medium">
+                    Ready
+                  </div>
+
+                  <div className="text-xs text-white/35">
+                    Analysis engine online
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 text-xs text-emerald-300">
+                ● Awaiting next task
+              </div>
+            </div>
+          </div>
+
+          {/* Findings */}
+          <div className="mt-8">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  Security findings
+                </h2>
+
+                <p className="mt-1 text-xs text-white/35">
+                  {findings.length > 0
+                    ? "Issues discovered during the latest analysis."
+                    : "Run a scan to discover security issues."}
+                </p>
+              </div>
+
+              {findings.length > 0 && (
+                <button
+                  onClick={() => setActive("Findings")}
+                  className="text-xs text-purple-300 hover:text-purple-200"
+                >
+                  View all →
+                </button>
+              )}
+            </div>
+
+            <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.025]">
+              {findings.length === 0 ? (
+                <div className="p-10 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-500/10 text-xl text-purple-300">
+                    ⌕
+                  </div>
+
+                  <div className="mt-4 text-sm font-medium">
+                    No scan results yet
+                  </div>
+
+                  <p className="mt-2 text-xs text-white/30">
+                    Run a security scan and PurpleGuard will populate this
+                    section with real findings.
+                  </p>
+                </div>
+              ) : (
+                findings.map((finding, index) => (
+                  <button
+                    key={finding.id + finding.file + finding.line + index}
+                    onClick={() => setSelectedFinding(finding)}
+                    className="flex w-full items-center gap-4 border-b border-white/10 p-4 text-left transition last:border-0 hover:bg-white/[0.035] md:p-5"
+                  >
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${severityClass(
+                        finding.severity
+                      )}`}
+                    >
+                      !
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium">
+                          {finding.name}
+                        </span>
+
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${severityClass(
+                            finding.severity
+                          )}`}
+                        >
+                          {finding.severity}
+                        </span>
+                      </div>
+
+                      <div className="mt-1 text-xs text-white/35">
+                        {finding.id} · {displayFile(finding.file)}:
+                        {finding.line}
+                      </div>
+                    </div>
+
+                    <span className="text-white/20">›</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* AI Engineer */}
+          <div className="mt-8 rounded-3xl border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-transparent p-6 md:p-8">
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-purple-500/20 text-purple-300">
+                ✦
+              </div>
+
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-purple-300">
+                  PurpleGuard AI Engineer
+                </div>
+
+                <h2 className="mt-2 text-xl font-semibold">
+                  I found security issues. I can help fix them.
+                </h2>
+
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-white/40">
+                  PurpleGuard can reason about the impact of a finding,
+                  propose a remediation, generate a patch, and verify that the
+                  vulnerability has actually been removed.
+                </p>
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setActive("AI Engineer")}
+                    className="rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"
+                  >
+                    Open AI Engineer
+                  </button>
+
+                  <button
+                    onClick={runScan}
+                    disabled={scanning}
+                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-medium text-white/70 disabled:opacity-50"
+                  >
+                    Analyze again
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Workflow */}
+          <div className="mt-8">
+            <div className="mb-4 text-lg font-semibold">
+              From finding to verified fix
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {[
+                ["01", "Understand", "Analyze project"],
+                ["02", "Discover", "Find vulnerabilities"],
+                ["03", "Reason", "Assess impact"],
+                ["04", "Remediate", "Create secure patch"],
+                ["05", "Verify", "Rescan & confirm"],
+              ].map(([number, title, description]) => (
+                <div
+                  key={number}
+                  className="rounded-2xl border border-white/10 bg-white/[0.025] p-4"
+                >
+                  <div className="text-[10px] text-purple-300">
+                    {number}
+                  </div>
+
+                  <div className="mt-3 text-sm font-medium">
+                    {title}
+                  </div>
+
+                  <div className="mt-1 text-xs text-white/30">
+                    {description}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <footer className="mt-12 border-t border-white/10 py-6 text-xs text-white/25">
+            PurpleGuard AI · Security engineering workspace · v0.1
+          </footer>
+        </section>
+      </div>
+
+      {/* Finding modal */}
+      {selectedFinding && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-6">
+          <div className="w-full max-w-xl rounded-t-3xl border border-white/10 bg-[#111018] p-6 shadow-2xl sm:rounded-3xl">
+            <div className="flex items-center justify-between">
+              <span
+                className={`rounded-full px-3 py-1 text-[10px] font-semibold ${severityClass(
+                  selectedFinding.severity
+                )}`}
+              >
+                {selectedFinding.severity}
+              </span>
+
+              <button
+                onClick={() => setSelectedFinding(null)}
+                className="text-xl text-white/40 hover:text-white"
+              >
+                ×
+              </button>
+            </div>
+
+            <h2 className="mt-5 text-2xl font-semibold">
+              {selectedFinding.name}
+            </h2>
+
+            <div className="mt-2 font-mono text-xs text-white/35">
+              {selectedFinding.file}:{selectedFinding.line} ·{" "}
+              {selectedFinding.id}
+            </div>
+
+            {selectedFinding.code && (
+              <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10 bg-black/30 p-4">
+                <div className="mb-2 text-[10px] uppercase tracking-wider text-white/25">
+                  Vulnerable code
+                </div>
+
+                <code className="font-mono text-xs text-red-200/80">
+                  {selectedFinding.code}
+                </code>
+              </div>
+            )}
+
+            <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs font-semibold text-white/60">
+                Why it matters
+              </div>
+
+              <p className="mt-2 text-sm leading-6 text-white/45">
+                {selectedFinding.description ||
+                  `PurpleGuard detected a ${selectedFinding.category} issue in attacker-relevant code.`}
+              </p>
+            </div>
+
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={() => {
+                  setSelectedFinding(null);
+                  setActive("AI Engineer");
+                }}
+                className="flex-1 rounded-xl bg-white px-4 py-3 text-xs font-semibold text-black"
+              >
+                Ask AI Engineer
+              </button>
+
+              <button
+                onClick={() => {
+                  setSelectedFinding(null);
+                  setActive("Changes");
+                }}
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-medium"
+              >
+                View changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}

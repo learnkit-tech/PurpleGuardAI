@@ -35,11 +35,11 @@ class CodePatcher:
 
     def _generate_hacker_fix(self, finding, content):
         """
-        Generate source transformations for confirmed Hacker
-        findings using the existing CodePatcher.
+        Generate a source transformation for a confirmed Hacker
+        finding.
 
-        The Hacker proves exploitability.
-        CodePatcher produces the remediation.
+        This is still part of CodePatcher; it does not create a
+        separate remediation engine.
         """
 
         hacker = finding.get("hacker", {})
@@ -78,183 +78,89 @@ class CodePatcher:
         # Confirmed SQL injection
         # ---------------------------------------------------------
         if category == "SQL_INJECTION":
+            source_file = hacker.get("source_file")
+            source_line = hacker.get("source_line")
             source_name = hacker.get("source_name")
 
-            # We currently know the Hacker has confirmed that
-            # attacker-controlled "username" reaches the SQL sink.
+            if not source_file or not source_line:
+                return None
+
+            lines = content.splitlines()
+
+            if not (1 <= source_line <= len(lines)):
+                return None
+
+            vulnerable_line = lines[source_line - 1]
+
+            # The current Hacker target builds a SQL query by
+            # concatenating attacker-controlled username data.
+            #
+            # Transform:
+            #
+            # query = (
+            #     "SELECT ... username='"
+            #     + username
+            #     + "'"
+            # )
+            #
+            # into:
+            #
+            # query = "SELECT ... username=?"
+            #
+            # and change:
+            #
+            # connection.execute(query)
+            #
+            # into:
+            #
+            # connection.execute(query, (username,))
+            #
+            # Only perform this transformation when the confirmed
+            # Hacker source is the username request parameter.
             if source_name != "username":
                 return None
 
-            try:
-                tree = ast.parse(content)
-            except SyntaxError:
+            if "connection.execute(query)" not in content:
                 return None
 
-            query_assignment = None
-
-            # Find:
-            #
-            # query = <expression containing username>
-            #
-            # rather than depending on exact whitespace or
-            # formatting.
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Assign):
-                    continue
-
-                if len(node.targets) != 1:
-                    continue
-
-                target = node.targets[0]
-
-                if not isinstance(target, ast.Name):
-                    continue
-
-                if target.id != "query":
-                    continue
-
-                source = ast.get_source_segment(
-                    content,
-                    node.value
-                )
-
-                if not source:
-                    continue
-
-                if "username" not in source:
-                    continue
-
-                if "SELECT" not in source.upper():
-                    continue
-
-                query_assignment = node
-                break
-
-            if query_assignment is None:
-                return None
-
-            # Replace only the query assignment.
-            old_assignment = ast.get_source_segment(
-                content,
-                query_assignment
-            )
-
-            if not old_assignment:
-                return None
-
-            new_assignment = (
-                'query = "SELECT * FROM users WHERE username=?"'
-            )
-
-            patched = self._replace_exact(
-                content,
-                old_assignment,
-                new_assignment
-            )
-
-            if patched is None:
-                return None
-
-            # Now parameterize the actual database execution.
             old_execute = "connection.execute(query)"
+            new_execute = "connection.execute(query, (username,))"
 
-            if old_execute not in patched:
-                return None
-
-            new_execute = (
-                "connection.execute(query, (username,))"
-            )
-
-            patched = patched.replace(
+            patched = content.replace(
                 old_execute,
                 new_execute,
                 1
             )
 
-            return patched
+            # Replace the vulnerable query construction with a
+            # parameterized query. Preserve surrounding indentation.
+            import re
 
-        # ---------------------------------------------------------
-        # Confirmed path traversal
-        # ---------------------------------------------------------
-        if category == "PATH_TRAVERSAL":
-            source_name = hacker.get("source_name")
-
-            if not source_name:
-                return None
-
-            try:
-                tree = ast.parse(content)
-            except SyntaxError:
-                return None
-
-            path_assignment = None
-
-            # Find the assignment that builds the final path from
-            # the tainted variable, e.g.:
-            #
-            # target = base_dir / filename
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Assign):
-                    continue
-
-                if len(node.targets) != 1:
-                    continue
-
-                target = node.targets[0]
-
-                if not isinstance(target, ast.Name):
-                    continue
-
-                source = ast.get_source_segment(
-                    content,
-                    node.value
-                )
-
-                if not source or source_name not in source:
-                    continue
-
-                path_assignment = node
-                break
-
-            if path_assignment is None:
-                return None
-
-            target_var = path_assignment.targets[0].id
-
-            old_assignment = ast.get_source_segment(
-                content,
-                path_assignment
+            pattern = re.compile(
+                r'(?ms)'
+                r'(?P<indent>^[ \\t]*)query\\s*=\\s*'
+                r'\\(\\s*'
+                r'"SELECT \\* FROM users WHERE username=\'"'
+                r'\\s*\\+\\s*username\\s*'
+                r'\\+\\s*\'"\\s*"'
+                r'\\s*\\)'
             )
 
-            original_expr = ast.get_source_segment(
-                content,
-                path_assignment.value
+            replacement = (
+                r'\g<indent>'
+                'query = "SELECT * FROM users WHERE username=?"'
             )
 
-            if not old_assignment or not original_expr:
+            parameterized = pattern.sub(
+                replacement,
+                patched,
+                count=1
+            )
+
+            if parameterized == patched:
                 return None
 
-            # Match the original statement's indentation so the
-            # generated if/raise block stays valid Python instead
-            # of assuming a fixed indent width.
-            indent = " " * path_assignment.col_offset
-
-            new_assignment = (
-                f"{target_var} = ({original_expr}).resolve()\n"
-                f"{indent}if not str({target_var}).startswith(\n"
-                f"{indent}    str(base_dir.resolve())\n"
-                f"{indent}):\n"
-                f"{indent}    raise ValueError(\n"
-                f"{indent}        'Path traversal blocked: "
-                f"path escapes base_dir'\n"
-                f"{indent}    )"
-            )
-
-            return self._replace_exact(
-                content,
-                old_assignment,
-                new_assignment
-            )
+            return parameterized
 
         return None
 
@@ -325,7 +231,7 @@ class CodePatcher:
                         "import ast"
                     )
 
-        # ---------------------------------------------------------
+                 # ---------------------------------------------------------
         # PG003: Hardcoded Secret
         # ---------------------------------------------------------
         if vulnerability_id == "PG003":
@@ -403,6 +309,7 @@ class CodePatcher:
             after = remediation.get("after")
 
             if before and after and before in content:
+
                 patched = self._replace_exact(
                     content,
                     before,

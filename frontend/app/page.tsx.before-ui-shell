@@ -393,7 +393,7 @@ export default function Home() {
       </header>
 
       <div className="mx-auto flex max-w-7xl">
-        <aside className="hidden w-60 shrink-0 border-r border-white/10 px-4 py-6 lg:block">
+        <aside className="hidden w-60 shrink-0 border-r border-white/10 px-4 py-6 md:block">
           <div className="mb-4 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/30">
             Security workspace
           </div>
@@ -434,8 +434,8 @@ export default function Home() {
           </div>
         </aside>
 
-        <section className="min-w-0 flex-1 px-4 py-5 pb-24 lg:px-8 lg:py-10 lg:pb-10">
-          <div className="mb-5 flex gap-2 overflow-x-auto pb-1 lg:hidden">
+        <section className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-10">
+          <div className="mb-6 flex gap-2 overflow-x-auto pb-1 md:hidden">
             {navigation.map((item) => (
               <button
                 key={item.name}
@@ -472,9 +472,18 @@ export default function Home() {
               </p>
             </div>
 
+            <button
+              onClick={() => runPurpleGuard(false)}
+              disabled={securing}
+              className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {securing
+                ? "PurpleGuard working..."
+                : "Run PurpleGuard"}
+            </button>
           </div>
 
-          <div className="mb-6 overflow-hidden rounded-3xl border border-purple-500/20 bg-gradient-to-br from-purple-500/[0.09] via-white/[0.025] to-transparent shadow-2xl shadow-purple-950/20 p-5 md:p-7">
+          <div className="mb-6 rounded-3xl border border-purple-500/20 bg-purple-500/5 p-5 md:p-7">
             <div className="mb-4">
               <div className="text-lg font-semibold">
                 Authorized security target
