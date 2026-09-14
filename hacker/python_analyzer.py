@@ -18,6 +18,15 @@ SQL_SINKS = {
     "executescript",
 }
 
+FILE_SINKS = {
+    "open": "PATH_TRAVERSAL",
+    "os.remove": "PATH_TRAVERSAL",
+    "os.rename": "PATH_TRAVERSAL",
+    "os.unlink": "PATH_TRAVERSAL",
+    "shutil.copy": "PATH_TRAVERSAL",
+    "shutil.move": "PATH_TRAVERSAL",
+}
+
 
 def get_call_name(node):
     if isinstance(node, ast.Name):
@@ -38,13 +47,13 @@ def get_sink_kind(name):
     if name in DANGEROUS_CALLS:
         return name
 
-    if name in SQL_SINKS:
+    if name in SQL_SINKS or name in FILE_SINKS:
         return name
 
     if "." in name:
         final_part = name.rsplit(".", 1)[-1]
 
-        if final_part in SQL_SINKS:
+        if final_part in SQL_SINKS or final_part in FILE_SINKS:
             return final_part
 
     return name
@@ -221,6 +230,41 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
                     confirmed_flow=confirmed_flow,
                 )
 
+        # File path sink.
+        elif kind in FILE_SINKS:
+
+            sink = AttackNode(
+                id=f"SINK-{len(self.sinks) + 1}",
+                kind="SINK",
+                name=name,
+                location=self.location(node),
+                description="File path operation.",
+            )
+
+            self.sinks.append(sink)
+
+            source = self.find_source_for_call(node)
+
+            if source is not None:
+
+                self.suspicious.append({
+                    "type": "PATH_TRAVERSAL",
+                    "severity": "HIGH",
+                    "file": self.filepath,
+                    "line": sink.location.line,
+                    "code": sink.location.code,
+                    "sink": name,
+                    "tainted_input": True,
+                })
+
+                self.build_attack_path(
+                    source=source,
+                    sink=sink,
+                    category="PATH_TRAVERSAL",
+                    severity="HIGH",
+                    confirmed_flow=True,
+                )
+
         self.generic_visit(node)
 
     def contains_external_input(self, node):
@@ -353,6 +397,18 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
             impact = (
                 "Potential execution of attacker-controlled "
                 "code."
+            )
+
+        elif category == "PATH_TRAVERSAL":
+
+            title = (
+                "Potential attacker-controlled data "
+                "may reach a file path operation."
+            )
+
+            impact = (
+                "Potential unauthorized file read, write, "
+                "or deletion outside the intended directory."
             )
 
         else:
