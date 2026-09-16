@@ -241,9 +241,7 @@ class CodePatcher:
 
             new_assignment = (
                 f"{target_var} = ({original_expr}).resolve()\n"
-                f"{indent}if not str({target_var}).startswith(\n"
-                f"{indent}    str(base_dir.resolve())\n"
-                f"{indent}):\n"
+                f"{indent}if not {target_var}.is_relative_to(base_dir.resolve()):\n"
                 f"{indent}    raise ValueError(\n"
                 f"{indent}        'Path traversal blocked: "
                 f"path escapes base_dir'\n"
