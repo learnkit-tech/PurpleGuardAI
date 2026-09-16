@@ -27,11 +27,19 @@ FILE_SINKS = {
     "shutil.move": "PATH_TRAVERSAL",
 }
 
-# Functions that count as a "safe hands-washing check" when
-# used like: if not re.match(pattern, variable): return/raise
+# Trick #1: re.match(pattern, variable) / re.fullmatch(pattern, variable)
+# called like: if not re.match(pattern, variable): return/raise
 WHITELIST_CHECK_FUNCTIONS = {
     "re.match",
     "re.fullmatch",
+}
+
+# Trick #2: variable.isalnum() called like:
+# if not variable.isalnum(): return/raise
+# These are checked ON the variable itself, not passed as an
+# argument, so they need different matching logic below.
+WHITELIST_METHOD_CHECKS = {
+    "isalnum",
 }
 
 
@@ -82,10 +90,10 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
         self.tainted = {}
         self.taint_sources = {}
 
-        # Variable names that were checked with a whitelist
-        # regex somewhere in this file. Filled in by analyze()
-        # before visiting anything, so it's known ahead of time
-        # rather than guessed as we go.
+        # Variable names with "hands were washed" checks found
+        # anywhere in this file. Filled in by analyze() before
+        # visiting anything, so it's known ahead of time rather
+        # than guessed as we go.
         self.sanitized = set()
 
     def analyze(self, tree):
@@ -100,9 +108,10 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
 
     def _find_sanitized_names(self, tree):
         """
-        Find variable names that are checked against a
-        whitelist regex, with a return/raise on failure,
-        anywhere in this file.
+        Find variable names that are checked with a whitelist
+        check - either a function call like re.match(pattern,
+        variable), or a method call on the variable itself like
+        variable.isalnum() - with a return/raise on failure.
         """
 
         sanitized = set()
@@ -125,18 +134,31 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
             if not isinstance(call, ast.Call):
                 continue
 
+            # Trick #1: re.match(pattern, variable)
+            # The variable is an ARGUMENT to the call.
             name = get_call_name(call.func)
 
-            if name not in WHITELIST_CHECK_FUNCTIONS:
+            if name in WHITELIST_CHECK_FUNCTIONS:
+
+                if len(call.args) >= 2:
+
+                    variable = call.args[1]
+
+                    if isinstance(variable, ast.Name):
+                        sanitized.add(variable.id)
+
                 continue
 
-            if len(call.args) < 2:
-                continue
-
-            variable = call.args[1]
-
-            if isinstance(variable, ast.Name):
-                sanitized.add(variable.id)
+            # Trick #2: variable.isalnum()
+            # The variable is what the call happens ON, not an
+            # argument - e.g. call.func is an Attribute whose
+            # .value is the variable itself.
+            if (
+                isinstance(call.func, ast.Attribute)
+                and call.func.attr in WHITELIST_METHOD_CHECKS
+                and isinstance(call.func.value, ast.Name)
+            ):
+                sanitized.add(call.func.value.id)
 
         return sanitized
 
@@ -218,7 +240,7 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
             source = self.find_source_for_call(node)
 
             # Hands were washed - this source was checked
-            # with a whitelist regex somewhere in the file.
+            # somewhere in the file.
             if source and source.name in self.sanitized:
                 self.generic_visit(node)
                 return
