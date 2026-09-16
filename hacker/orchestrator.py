@@ -230,6 +230,7 @@ class PurpleGuardSecurityOrchestrator:
         category_to_rule = {
             "CODE_EXECUTION": "PG002",
             "SQL_INJECTION": "PG004",
+            "PATH_TRAVERSAL": "PG006",
         }
 
         return {
