@@ -34,12 +34,14 @@ WHITELIST_CHECK_FUNCTIONS = {
     "re.fullmatch",
 }
 
-# Trick #2: variable.isalnum() called like:
+# Trick #2: variable.isalnum() / .isdigit() / .isalpha() called like:
 # if not variable.isalnum(): return/raise
-# These are checked ON the variable itself, not passed as an
-# argument, so they need different matching logic below.
+# All three check the variable itself the same way, so they share
+# one set and one piece of matching logic.
 WHITELIST_METHOD_CHECKS = {
     "isalnum",
+    "isdigit",
+    "isalpha",
 }
 
 
@@ -149,7 +151,7 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
 
                 continue
 
-            # Trick #2: variable.isalnum()
+            # Trick #2: variable.isalnum() / .isdigit() / .isalpha()
             # The variable is what the call happens ON, not an
             # argument - e.g. call.func is an Attribute whose
             # .value is the variable itself.
