@@ -6,6 +6,11 @@ import sqlite3
 app = Flask(__name__)
 
 
+@app.errorhandler(ValueError)
+def handle_value_error(error):
+    return {"error": str(error)}, 403
+
+
 def search_user():
     username = request.args.get("username")
 
@@ -34,9 +39,7 @@ def read():
     filename = request.args.get("file")
     base_dir = Path(__file__).resolve().parent / "reports"
     target = (base_dir / filename).resolve()
-    if not str(target).startswith(
-        str(base_dir.resolve())
-    ):
+    if not target.is_relative_to(base_dir.resolve()):
         raise ValueError(
             'Path traversal blocked: path escapes base_dir'
         )
