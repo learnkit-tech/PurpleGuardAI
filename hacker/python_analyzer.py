@@ -27,6 +27,13 @@ FILE_SINKS = {
     "shutil.move": "PATH_TRAVERSAL",
 }
 
+# Functions that count as a "safe hands-washing check" when
+# used like: if not re.match(pattern, variable): return/raise
+WHITELIST_CHECK_FUNCTIONS = {
+    "re.match",
+    "re.fullmatch",
+}
+
 
 def get_call_name(node):
     if isinstance(node, ast.Name):
@@ -74,6 +81,64 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
 
         self.tainted = {}
         self.taint_sources = {}
+
+        # Variable names that were checked with a whitelist
+        # regex somewhere in this file. Filled in by analyze()
+        # before visiting anything, so it's known ahead of time
+        # rather than guessed as we go.
+        self.sanitized = set()
+
+    def analyze(self, tree):
+        """
+        Entry point: find "hands were washed" checks first,
+        then walk the file for actual sinks.
+        """
+
+        self.sanitized = self._find_sanitized_names(tree)
+
+        self.visit(tree)
+
+    def _find_sanitized_names(self, tree):
+        """
+        Find variable names that are checked against a
+        whitelist regex, with a return/raise on failure,
+        anywhere in this file.
+        """
+
+        sanitized = set()
+
+        for node in ast.walk(tree):
+
+            if not isinstance(node, ast.If):
+                continue
+
+            test = node.test
+
+            if not (
+                isinstance(test, ast.UnaryOp)
+                and isinstance(test.op, ast.Not)
+            ):
+                continue
+
+            call = test.operand
+
+            if not isinstance(call, ast.Call):
+                continue
+
+            name = get_call_name(call.func)
+
+            if name not in WHITELIST_CHECK_FUNCTIONS:
+                continue
+
+            if len(call.args) < 2:
+                continue
+
+            variable = call.args[1]
+
+            if isinstance(variable, ast.Name):
+                sanitized.add(variable.id)
+
+        return sanitized
 
     def location(self, node):
 
@@ -150,6 +215,14 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
 
             category, severity = DANGEROUS_CALLS[kind]
 
+            source = self.find_source_for_call(node)
+
+            # Hands were washed - this source was checked
+            # with a whitelist regex somewhere in the file.
+            if source and source.name in self.sanitized:
+                self.generic_visit(node)
+                return
+
             sink = AttackNode(
                 id=f"SINK-{len(self.sinks) + 1}",
                 kind="SINK",
@@ -162,8 +235,6 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
             )
 
             self.sinks.append(sink)
-
-            source = self.find_source_for_call(node)
 
             confirmed_flow = source is not None
 
@@ -188,6 +259,15 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
         # SQL execution sink.
         elif kind in SQL_SINKS:
 
+            dynamic_sql = self.sql_looks_dynamic(node)
+
+            source = self.find_source_for_call(node)
+
+            # Hands were washed - skip entirely.
+            if source and source.name in self.sanitized:
+                self.generic_visit(node)
+                return
+
             sink = AttackNode(
                 id=f"SINK-{len(self.sinks) + 1}",
                 kind="SINK",
@@ -199,10 +279,6 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
             )
 
             self.sinks.append(sink)
-
-            dynamic_sql = self.sql_looks_dynamic(node)
-
-            source = self.find_source_for_call(node)
 
             confirmed_flow = (
                 dynamic_sql
@@ -233,6 +309,12 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
         # File path sink.
         elif kind in FILE_SINKS:
 
+            source = self.find_source_for_call(node)
+
+            if source and source.name in self.sanitized:
+                self.generic_visit(node)
+                return
+
             sink = AttackNode(
                 id=f"SINK-{len(self.sinks) + 1}",
                 kind="SINK",
@@ -242,8 +324,6 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
             )
 
             self.sinks.append(sink)
-
-            source = self.find_source_for_call(node)
 
             if source is not None:
 
@@ -478,7 +558,7 @@ def analyze_python_file(filepath):
         source,
     )
 
-    analyzer.visit(tree)
+    analyzer.analyze(tree)
 
     return {
         "sources": analyzer.sources,
