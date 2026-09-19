@@ -1,14 +1,36 @@
 import ast
 import os
+from pathlib import Path
 
 from scanner.remediation.engine import RemediationEngine
 from scanner.remediation.diff import generate_diff
+from scanner.rules.path_traversal import PathTraversalRule
 
 
 class CodePatcher:
     """
     Generates safe source-code patches for PurpleGuard findings.
     """
+
+    # Finding classes that have an automated fix path (legacy
+    # static handlers for PG001-PG004, hacker-derived
+    # transformations for PG005, PG007, PG008, and the
+    # conservative static patch for PG006). Per-finding
+    # provability is decided by can_auto_fix(); anything not
+    # provable stays a finding for manual review rather than
+    # being silently transformed.
+    AUTO_FIXABLE = frozenset(
+        {
+            "PG001",
+            "PG002",
+            "PG003",
+            "PG004",
+            "PG005",
+            "PG006",
+            "PG007",
+            "PG008",
+        }
+    )
 
     def __init__(self):
         self.engine = RemediationEngine()
@@ -603,6 +625,339 @@ class CodePatcher:
 
         return None
 
+    def can_auto_fix(self, finding):
+        """
+        Decide per finding whether a provably safe automated fix
+        exists right now, by dry-running the fix generation in
+        memory. Never modifies any file.
+        """
+
+        if finding.get("id") not in self.AUTO_FIXABLE:
+            return False
+
+        file_path = finding.get("file")
+
+        if not file_path or not os.path.exists(
+            file_path
+        ):
+            return False
+
+        try:
+            with open(file_path, "r") as file:
+                content = file.read()
+        except OSError:
+            return False
+
+        return self._generate_actual_fix(
+            finding,
+            content,
+        ) is not None
+
+    def _generate_static_path_traversal_fix(
+        self,
+        finding,
+        content,
+    ):
+        """
+        Conservative static remediation for path traversal
+        (PG006) without attacker-confirmed metadata.
+
+        Only one shape is provably safe to transform:
+
+            target = <base> / <filename>
+
+        where <base> must be a trusted expression (module-level
+        constant, __file__-derived path, or a local variable)
+        and <filename> is a function parameter that flows
+        directly into open(). Anything else returns None so the
+        finding stays in the manual-review queue instead of
+        being silently rewritten.
+        """
+
+        sink_line = finding.get("line")
+
+        if not isinstance(sink_line, int):
+            return None
+
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return None
+
+        sink_node = next(
+            (
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                and node.lineno == sink_line
+                and isinstance(node.func, (ast.Name, ast.Attribute))
+                and (
+                    node.func.id
+                    if isinstance(node.func, ast.Name)
+                    else node.func.attr
+                )
+                in PathTraversalRule.FILE_FUNCTIONS
+            ),
+            None,
+        )
+
+        if sink_node is None:
+            return None
+
+        if not sink_node.args:
+            return None
+
+        path_var_node = sink_node.args[0]
+
+        # Only plain variable arguments are supported. A bare
+        # attribute call like open(request.args.get("file"))
+        # has no local path variable to guard.
+        if not isinstance(path_var_node, ast.Name):
+            return None
+
+        path_var = path_var_node.id
+
+        enclosing = self._find_enclosing_function(
+            tree,
+            sink_node,
+        )
+
+        if enclosing is None:
+            return None
+
+        guarded = PathTraversalRule._find_guarded_names(
+            enclosing
+        )
+
+        if path_var in guarded:
+            return None
+
+        # Find the single assignment that builds this path.
+        # On Path objects the "/" operator parses as ast.Div,
+        # so base / filename is a BinOp with a Div operator.
+        path_assignments = [
+            node
+            for node in ast.walk(enclosing)
+            if isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id == path_var
+            and isinstance(node.value, ast.BinOp)
+            and isinstance(node.value.op, ast.Div)
+        ]
+
+        if len(path_assignments) != 1:
+            return None
+
+        assignment = path_assignments[0]
+
+        left = assignment.value.left
+        right = assignment.value.right
+
+        # The filename operand must be a plain variable: either
+        # a function parameter or a local assigned exactly once.
+        # Its exact provenance does not affect fix safety - the
+        # generated guard is taint-agnostic and blocks escapes
+        # for any filename value - but keeping it a simple,
+        # clearly-scoped name keeps the transformation provable.
+        # The BASE operand is where trust is strictly proven.
+        parameter_names = {
+            arg.arg
+            for arg in enclosing.args.args
+        }
+
+        filename_node = None
+        base_node = None
+
+        for candidate, other in (
+            (right, left),
+            (left, right),
+        ):
+            if not isinstance(candidate, ast.Name):
+                continue
+
+            if candidate.id in parameter_names:
+                filename_node = candidate
+                base_node = other
+                break
+
+            assigned = [
+                inner
+                for inner in ast.walk(enclosing)
+                if isinstance(inner, ast.Assign)
+                and any(
+                    isinstance(target, ast.Name)
+                    and target.id == candidate.id
+                    for target in inner.targets
+                )
+            ]
+
+            if len(assigned) == 1:
+                filename_node = candidate
+                base_node = other
+                break
+
+        if filename_node is None or base_node is None:
+            return None
+
+        # The base operand must be provably trusted: a module-
+        # level constant (not a parameter, never assigned inside
+        # this function) or a __file__-derived chain. Anything
+        # else - tainted locals, request-derived calls, computed
+        # expressions - stays unproven and is left for review.
+        if not self._is_trusted_base_operand(
+            base_node,
+            content,
+            enclosing,
+            parameter_names,
+        ):
+            return None
+
+        base_source = ast.get_source_segment(
+            content,
+            base_node,
+        )
+
+        if not base_source:
+            return None
+
+        # Reuse the exact transformation pattern already proven
+        # by the Hacker-confirmed PATH_TRAVERSAL fix (see
+        # tests/hacker_target/app.py): resolve + is_relative_to
+        # guard + raise. This keeps scanner whitelisting in sync
+        # so a patched file passes re-scan.
+        assignment_source = ast.get_source_segment(
+            content,
+            assignment,
+        )
+
+        if not assignment_source:
+            return None
+
+        indent = " " * assignment.col_offset
+
+        fixed_assignment = (
+            f"{path_var} = ("
+            f"Path({base_source}) / {filename_node.id}"
+            f").resolve()\n"
+            f"{indent}if not {path_var}.is_relative_to("
+            f"Path({base_source}).resolve()):\n"
+            f"{indent}    raise ValueError(\n"
+            f"{indent}        'Path traversal blocked: "
+            f"path escapes trusted base directory'\n"
+            f"{indent}    )"
+        )
+
+        patched = self._replace_exact(
+            content,
+            assignment_source,
+            fixed_assignment,
+        )
+
+        if patched is None:
+            return None
+
+        return self._ensure_import(
+            patched,
+            "from pathlib import Path",
+        )
+
+    @staticmethod
+    def _is_trusted_base_operand(
+        node,
+        content,
+        enclosing,
+        parameter_names,
+    ):
+        """
+        Decide whether a path-join base operand can be trusted
+        without runtime knowledge. Only two shapes qualify:
+
+        - a __file__-derived attribute chain, e.g.
+          Path(__file__).resolve().parent
+        - a plain variable name that is not a function
+          parameter and is never assigned inside the enclosing
+          function, i.e. it comes from module scope.
+        """
+
+        if isinstance(node, ast.Attribute):
+
+            source = ast.get_source_segment(
+                content,
+                node,
+            )
+
+            return bool(
+                source
+                and "__file__" in source
+            )
+
+        if isinstance(node, ast.Name):
+
+            if node.id in parameter_names:
+                return False
+
+            assignments = [
+                inner
+                for inner in ast.walk(enclosing)
+                if isinstance(inner, ast.Assign)
+                and any(
+                    isinstance(target, ast.Name)
+                    and target.id == node.id
+                    for target in inner.targets
+                )
+            ]
+
+            # Never assigned inside the function: it comes from
+            # module scope. Only UPPER_CASE constants are treated
+            # as trusted configuration.
+            if not assignments:
+                return node.id.isupper()
+
+            # A single in-function alias is trusted only when its
+            # value is __file__-derived (the proven remediated
+            # pattern, e.g. base_dir = Path(__file__).../"reports").
+            # Anything else, such as request-derived locals, stays
+            # unproven.
+            if len(assignments) != 1:
+                return False
+
+            value_source = ast.get_source_segment(
+                content,
+                assignments[0].value,
+            )
+
+            return bool(
+                value_source
+                and "__file__" in value_source
+            )
+
+        return False
+
+    @staticmethod
+    def _find_enclosing_function(tree, node):
+        """
+        Return the innermost FunctionDef containing node, or
+        None if the call site is at module level or inside a
+        non-function scope.
+        """
+
+        best = None
+
+        for candidate in ast.walk(tree):
+            if not isinstance(
+                candidate,
+                (ast.FunctionDef, ast.AsyncFunctionDef),
+            ):
+                continue
+
+            for child in ast.walk(candidate):
+                if child is node:
+                    best = candidate
+                    break
+
+        return best
+
     @staticmethod
     def _has_shell_true(node):
         for keyword in node.keywords:
@@ -633,9 +988,24 @@ class CodePatcher:
         # mapping instead of duplicated fix code.
         static_categories = {
             "PG005": "COMMAND_INJECTION",
+            "PG006": "PATH_TRAVERSAL",
             "PG007": "XSS",
             "PG008": "OPEN_REDIRECT",
         }
+
+        if finding["id"] == "PG006":
+            static_fix = self._generate_static_path_traversal_fix(
+                finding,
+                content,
+            )
+
+            if static_fix is not None:
+                return static_fix
+
+            # Unprovable pattern: keep it as a finding requiring
+            # review. Returning None must never silently rewrite
+            # the file, so only the supported shape is patched.
+            return None
 
         if finding["id"] in static_categories:
             static_fix = self._generate_hacker_fix(

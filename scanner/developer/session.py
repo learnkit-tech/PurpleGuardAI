@@ -10,6 +10,7 @@ from scanner.analyzer.attack_surface import discover_attack_surface
 
 from scanner.reporting import enrich_findings
 from scanner.remediation.workflow import RemediationWorkflow
+from scanner.remediation.patcher import CodePatcher
 
 
 class DeveloperSession:
@@ -196,8 +197,44 @@ class DeveloperSession:
                 "proposals": proposals
             }
 
+        # Only findings with a provably safe automated fix are
+        # remediated. Provability is decided per finding (for
+        # example, only certain PG006 path-construction shapes can
+        # be safely transformed); everything else is surfaced as a
+        # finding requiring manual review instead of being
+        # silently rewritten.
+        patcher = CodePatcher()
+
+        auto_fixable = [
+            finding
+            for finding in findings
+            if patcher.can_auto_fix(finding)
+        ]
+
+        requires_review = [
+            finding
+            for finding in findings
+            if not patcher.can_auto_fix(finding)
+        ]
+
+        if not auto_fixable:
+            return {
+                "status": "REVIEW_REQUIRED",
+                "message": (
+                    "No findings have a safe automated fix. "
+                    "Manual review is required."
+                ),
+                "fixed": [],
+                "remaining": [
+                    finding.get("id")
+                    for finding in requires_review
+                ],
+                "requires_review": requires_review,
+                "final_scan": report
+            }
+
         apply_result = self.remediation.apply_patches(
-            findings,
+            auto_fixable,
             approved=True
         )
 
@@ -210,8 +247,13 @@ class DeveloperSession:
 
         fixed = [
             finding.get("id")
-            for finding in findings
+            for finding in auto_fixable
             if finding.get("id") not in remaining
+        ]
+
+        review_ids = [
+            finding.get("id")
+            for finding in requires_review
         ]
 
         return {
@@ -222,6 +264,8 @@ class DeveloperSession:
             ),
             "fixed": fixed,
             "remaining": remaining,
+            "requires_review": requires_review,
+            "review_ids": review_ids,
             "results": apply_result.get(
                 "results",
                 []

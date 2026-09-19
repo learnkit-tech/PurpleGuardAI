@@ -63,21 +63,48 @@ class TestSecureAll(unittest.TestCase):
             approved=True
         )
 
+        # The fixture contains one deliberately unprovable PG006
+        # shape (a bare open() with no base directory), which the
+        # planner must leave as a finding requiring review instead
+        # of silently rewriting it.
         self.assertEqual(
             result["status"],
-            "SECURE"
+            "PARTIALLY_SECURED"
         )
+
+        for finding_id in (
+            "PG002",
+            "PG003",
+            "PG004",
+        ):
+            self.assertIn(
+                finding_id,
+                result["fixed"]
+            )
 
         self.assertEqual(
             result["remaining"],
-            []
+            ["PG006"]
+        )
+
+        review_ids = [
+            finding["id"]
+            for finding in result["requires_review"]
+        ]
+
+        self.assertEqual(
+            review_ids,
+            ["PG006"]
         )
 
         final_scan = session.scan()
 
         self.assertEqual(
-            final_scan["findings"],
-            []
+            [
+                finding["id"]
+                for finding in final_scan["findings"]
+            ],
+            ["PG006"]
         )
 
     def test_secure_all_creates_backups(self):
@@ -89,7 +116,7 @@ class TestSecureAll(unittest.TestCase):
 
         self.assertEqual(
             result["status"],
-            "SECURE"
+            "PARTIALLY_SECURED"
         )
 
         backups = list(
@@ -112,21 +139,46 @@ class TestSecureAll(unittest.TestCase):
 
         self.assertEqual(
             first["status"],
-            "SECURE"
+            "PARTIALLY_SECURED"
         )
 
+        self.first_backups = list(
+            self.project.rglob(
+                "*.purpleguard.bak"
+            )
+        )
+
+        # A second run must be a no-op: the only remaining finding
+        # is the unprovable PG006 shape, which stays in the review
+        # queue without touching any files again.
         second = session.secure_all(
             approved=True
         )
 
         self.assertEqual(
             second["status"],
-            "SECURE"
+            "REVIEW_REQUIRED"
+        )
+
+        self.assertEqual(
+            second["fixed"],
+            []
         )
 
         self.assertEqual(
             second["remaining"],
-            []
+            first["remaining"]
+        )
+
+        # The second run creates no new backups: no file is
+        # touched when nothing is auto-fixable.
+        self.assertEqual(
+            list(
+                self.project.rglob(
+                    "*.purpleguard.bak"
+                )
+            ),
+            self.first_backups
         )
 
     def test_rollback_restores_vulnerable_source(self):
@@ -138,14 +190,17 @@ class TestSecureAll(unittest.TestCase):
 
             self.assertEqual(
                 result["status"],
-                "SECURE"
+                "PARTIALLY_SECURED"
             )
 
             secure_scan = session.scan()
 
             self.assertEqual(
-                secure_scan["findings"],
-                []
+                [
+                    finding["id"]
+                    for finding in secure_scan["findings"]
+                ],
+                ["PG006"]
             )
 
             secrets_file = self.project / "secrets.py"

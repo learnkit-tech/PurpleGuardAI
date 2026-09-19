@@ -6,11 +6,6 @@ import sqlite3
 app = Flask(__name__)
 
 
-@app.errorhandler(ValueError)
-def handle_value_error(error):
-    return {"error": str(error)}, 403
-
-
 def search_user():
     username = request.args.get("username")
 
