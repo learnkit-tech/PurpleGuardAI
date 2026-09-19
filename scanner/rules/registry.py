@@ -4,6 +4,8 @@ from scanner.rules.secrets import HardcodedSecretRule
 from scanner.rules.sql_injection import SQLInjectionRule
 from scanner.rules.command_injection import CommandInjectionRule
 from scanner.rules.path_traversal import PathTraversalRule
+from scanner.rules.xss import XSSRule
+from scanner.rules.open_redirect import OpenRedirectRule
 
 
 RULES = [
@@ -12,5 +14,7 @@ RULES = [
     HardcodedSecretRule(),
     SQLInjectionRule(),
     CommandInjectionRule(),
-    PathTraversalRule()
+    PathTraversalRule(),
+    XSSRule(),
+    OpenRedirectRule()
 ]

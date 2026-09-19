@@ -1,0 +1,51 @@
+from pathlib import Path
+
+APP = '''import os
+import subprocess
+from pathlib import Path
+from flask import Flask, Response, redirect, request
+
+app = Flask(__name__)
+
+
+@app.route("/run")
+def run():
+    command = request.args.get("command")
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    return {"output": result.stdout + result.stderr}
+
+
+@app.route("/ping")
+def ping():
+    host = request.args.get("host")
+    stream = os.popen("ping -c 1 " + host)
+    return {"output": stream.read()}
+
+
+@app.route("/greet")
+def greet():
+    name = request.args.get("name")
+    return Response("Hello " + name)
+
+
+@app.route("/page")
+def page():
+    who = request.args.get("who")
+    return Response("<h1>Profile of " + who + "</h1>")
+
+
+@app.route("/go")
+def go():
+    next_url = request.args.get("next")
+    return redirect(next_url)
+
+
+@app.route("/jump")
+def jump():
+    destination = request.args.get("to")
+    return redirect(destination)
+'''
+
+Path(__file__).with_name("web_app.py").write_text(APP)
+
+print("Vulnerable web test fixture restored.")

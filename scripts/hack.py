@@ -161,6 +161,18 @@ def main():
 
             "validate_calculator":
                 validator.validate_calculator,
+
+            "validate_path_traversal":
+                validator.validate_path_traversal,
+
+            "validate_command_execution":
+                validator.validate_command_execution,
+
+            "validate_xss_reflection":
+                validator.validate_xss_reflection,
+
+            "validate_open_redirect":
+                validator.validate_open_redirect,
         }
 
         for plan in plans:

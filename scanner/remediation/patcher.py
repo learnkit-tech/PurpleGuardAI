@@ -75,6 +75,353 @@ class CodePatcher:
             )
 
         # ---------------------------------------------------------
+        # Confirmed command injection
+        # ---------------------------------------------------------
+        if category == "COMMAND_INJECTION":
+            source_line = finding.get("code", "")
+
+            if not source_line:
+                return None
+
+            try:
+                tree = ast.parse(source_line)
+            except SyntaxError:
+                return None
+
+            call_node = next(
+                (
+                    node
+                    for node in ast.walk(tree)
+                    if isinstance(node, ast.Call)
+                ),
+                None,
+            )
+
+            if call_node is None:
+                return None
+
+            if not (
+                isinstance(call_node.func, ast.Attribute)
+                and isinstance(call_node.func.value, ast.Name)
+            ):
+                return None
+
+            owner = call_node.func.value.id
+            attribute = call_node.func.attr
+
+            if not call_node.args:
+                return None
+
+            command_argument = call_node.args[0]
+
+            original_argument = ast.get_source_segment(
+                source_line,
+                command_argument
+            )
+
+            if not original_argument:
+                return None
+
+            # shlex.split() turns a command-line string into a
+            # safe argument list so shell metacharacters lose
+            # their meaning.
+            safe_arguments = ast.Call(
+                func=ast.Name(
+                    id="shlex.split",
+                    ctx=ast.Load(),
+                ),
+                args=[command_argument],
+                keywords=[],
+            )
+
+            if (
+                owner == "os"
+                and attribute == "system"
+            ):
+                new_call = ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(
+                            id="subprocess",
+                            ctx=ast.Load(),
+                        ),
+                        attr="run",
+                        ctx=ast.Load(),
+                    ),
+                    args=[safe_arguments],
+                    keywords=[
+                        ast.keyword(
+                            arg="shell",
+                            value=ast.Constant(value=False),
+                        )
+                    ],
+                )
+
+            elif (
+                owner == "os"
+                and attribute == "popen"
+            ):
+                # popen returns a readable stream; keep a pipe so
+                # downstream .read() calls keep working.
+                new_call = ast.Attribute(
+                    value=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Name(
+                                id="subprocess",
+                                ctx=ast.Load(),
+                            ),
+                            attr="Popen",
+                            ctx=ast.Load(),
+                        ),
+                        args=[safe_arguments],
+                        keywords=[
+                            ast.keyword(
+                                arg="stdout",
+                                value=ast.Attribute(
+                                    value=ast.Name(
+                                        id="subprocess",
+                                        ctx=ast.Load(),
+                                    ),
+                                    attr="PIPE",
+                                    ctx=ast.Load(),
+                                ),
+                            ),
+                            ast.keyword(
+                                arg="text",
+                                value=ast.Constant(value=True),
+                            ),
+                        ],
+                    ),
+                    attr="stdout",
+                    ctx=ast.Load(),
+                )
+
+            elif (
+                owner == "subprocess"
+                and attribute in (
+                    "run",
+                    "call",
+                    "check_call",
+                    "check_output",
+                    "Popen",
+                )
+                and self._has_shell_true(call_node)
+            ):
+                # Preserve every other argument and keyword so the
+                # fixed call keeps behaving like the original one.
+                new_call = ast.Call(
+                    func=call_node.func,
+                    args=(
+                        [safe_arguments]
+                        + list(call_node.args[1:])
+                    ),
+                    keywords=(
+                        [
+                            ast.keyword(
+                                arg="shell",
+                                value=ast.Constant(value=False),
+                            )
+                        ]
+                        + [
+                            keyword
+                            for keyword in call_node.keywords
+                            if keyword.arg != "shell"
+                        ]
+                    ),
+                )
+
+            else:
+                return None
+
+            original_call = ast.get_source_segment(
+                source_line,
+                call_node
+            )
+
+            if not original_call:
+                return None
+
+            fixed_line = source_line.replace(
+                original_call,
+                ast.unparse(new_call),
+                1
+            )
+
+            patched = self._replace_exact(
+                content,
+                source_line,
+                fixed_line
+            )
+
+            if patched is None:
+                return None
+
+            patched = self._ensure_import(
+                patched,
+                "import shlex"
+            )
+
+            return self._ensure_import(
+                patched,
+                "import subprocess"
+            )
+
+        # ---------------------------------------------------------
+        # Confirmed reflected XSS
+        # ---------------------------------------------------------
+        if category == "XSS":
+            source_line = finding.get("code", "")
+
+            if not source_line:
+                return None
+
+            try:
+                tree = ast.parse(source_line)
+            except SyntaxError:
+                return None
+
+            call_node = next(
+                (
+                    node
+                    for node in ast.walk(tree)
+                    if isinstance(node, ast.Call)
+                ),
+                None,
+            )
+
+            if call_node is None:
+                return None
+
+            if not (
+                isinstance(call_node.func, ast.Name)
+                and call_node.func.id
+                in (
+                    "Response",
+                    "make_response",
+                    "render_template_string",
+                    "Markup",
+                )
+            ):
+                return None
+
+            if not call_node.args:
+                return None
+
+            original_argument = ast.get_source_segment(
+                source_line,
+                call_node.args[0]
+            )
+
+            if not original_argument:
+                return None
+
+            fixed_line = source_line.replace(
+                original_argument,
+                f"escape({original_argument})",
+                1
+            )
+
+            patched = self._replace_exact(
+                content,
+                source_line,
+                fixed_line
+            )
+
+            if patched is None:
+                return None
+
+            return self._ensure_import(
+                patched,
+                "from markupsafe import escape"
+            )
+
+        # ---------------------------------------------------------
+        # Confirmed open redirect
+        # ---------------------------------------------------------
+        if category == "OPEN_REDIRECT":
+            source_line = finding.get("code", "")
+
+            if not source_line:
+                return None
+
+            try:
+                tree = ast.parse(source_line)
+            except SyntaxError:
+                return None
+
+            call_node = next(
+                (
+                    node
+                    for node in ast.walk(tree)
+                    if isinstance(node, ast.Call)
+                ),
+                None,
+            )
+
+            if call_node is None:
+                return None
+
+            if not (
+                isinstance(call_node.func, ast.Name)
+                and call_node.func.id == "redirect"
+            ):
+                return None
+
+            if not call_node.args:
+                return None
+
+            arg0 = call_node.args[0]
+
+            if not isinstance(arg0, ast.Name):
+                return None
+
+            # Locate the actual statement in the file. The finding
+            # code is only the call expression, so extend it to the
+            # full statement (e.g. "return redirect(next_url)")
+            # before inserting the guard.
+            position = content.find(source_line)
+
+            if position < 0:
+                return None
+
+            line_start = content.rfind("\n", 0, position) + 1
+
+            prefix = content[line_start:position]
+            statement_prefix = prefix.strip()
+
+            # Only bare statements and simple returns are
+            # supported; anything more complex is left untouched.
+            if statement_prefix not in ("", "return"):
+                return None
+
+            indent = prefix[
+                : len(prefix) - len(prefix.lstrip())
+            ]
+
+            statement = prefix + source_line
+
+            # Relative-only redirect: any destination that does
+            # not start with "/" is rejected, so scheme-relative
+            # (//host) and absolute URLs can never be reached.
+            guard = (
+                f"{indent}if not {arg0.id}.startswith('/'):\n"
+                f"{indent}    raise ValueError(\n"
+                f"{indent}        'Open redirect blocked: only "
+                f"relative redirect targets are allowed'\n"
+                f"{indent}    )"
+            )
+
+            patched = self._replace_exact(
+                content,
+                statement,
+                guard + "\n" + statement
+            )
+
+            if patched is None:
+                return None
+
+            return patched
+
+        # ---------------------------------------------------------
         # Confirmed SQL injection
         # ---------------------------------------------------------
         if category == "SQL_INJECTION":
@@ -256,6 +603,18 @@ class CodePatcher:
 
         return None
 
+    @staticmethod
+    def _has_shell_true(node):
+        for keyword in node.keywords:
+            if (
+                keyword.arg == "shell"
+                and isinstance(keyword.value, ast.Constant)
+                and keyword.value.value is True
+            ):
+                return True
+
+        return False
+
     def _generate_actual_fix(self, finding, content):
         # Confirmed Hacker findings get first-class remediation
         # through the existing CodePatcher.
@@ -267,6 +626,32 @@ class CodePatcher:
 
             if hacker_fix is not None:
                 return hacker_fix
+
+        # Static findings produced by the new rules (PG005-
+        # PG008) reuse the exact same transformations as the
+        # confirmed Hacker findings, with a synthetic category
+        # mapping instead of duplicated fix code.
+        static_categories = {
+            "PG005": "COMMAND_INJECTION",
+            "PG007": "XSS",
+            "PG008": "OPEN_REDIRECT",
+        }
+
+        if finding["id"] in static_categories:
+            static_fix = self._generate_hacker_fix(
+                {
+                    **finding,
+                    "hacker": {
+                        "category": static_categories[
+                            finding["id"]
+                        ]
+                    },
+                },
+                content
+            )
+
+            if static_fix is not None:
+                return static_fix
 
         """
         Generate the actual fixed source code for a finding.

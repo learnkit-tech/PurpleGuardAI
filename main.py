@@ -22,11 +22,12 @@ def run_scan(
 
     results = scanner.scan()
     report = generate_report(results)
-   decision_engine = SecurityDecisionEngine()
 
-decision = decision_engine.decide(report)
+    decision_engine = SecurityDecisionEngine()
 
-report["decision"] = decision
+    decision = decision_engine.decide(report)
+
+    report["decision"] = decision
 
     if severity:
         report["findings"] = filter_by_severity(
@@ -63,22 +64,22 @@ report["decision"] = decision
     print("Risk Score:", analysis["risk_score"])
     print("Overall Risk:", analysis["overall_risk"])
 
-   print("\nSecurity Decision")
-print("-----------------")
-print("Risk:", decision["risk"])
-print("Action:", decision["action"])
-print(
-    "Approval Required:",
-    decision["approval_required"]
-)
-print(
-    "Verification Required:",
-    decision["verification_required"]
-)
-print(
-    "Rollback Available:",
-    decision["rollback_available"]
-)
+    print("\nSecurity Decision")
+    print("-----------------")
+    print("Risk:", decision["risk"])
+    print("Action:", decision["action"])
+    print(
+        "Approval Required:",
+        decision["approval_required"]
+    )
+    print(
+        "Verification Required:",
+        decision["verification_required"]
+    )
+    print(
+        "Rollback Available:",
+        decision["rollback_available"]
+    )
 
     print("\nFindings")
     print("--------")

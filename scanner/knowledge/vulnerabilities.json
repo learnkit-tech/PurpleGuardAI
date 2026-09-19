@@ -46,6 +46,23 @@
         "priority": "CRITICAL",
         "description": "Unsafely executing system commands can allow attacker-controlled input to execute arbitrary operating-system commands.",
         "recommendation": "Avoid shell execution with untrusted input. Use safe subprocess APIs with argument lists and validate inputs."
-
+    },
+    "PG007": {
+        "name": "Cross-Site Scripting",
+        "category": "Cross-Site Scripting",
+        "severity": "HIGH",
+        "score": 7.5,
+        "priority": "HIGH",
+        "description": "Unescaped user input reflected into an HTTP response body allows attackers to run scripts in the victim's browser.",
+        "recommendation": "Escape user-controlled values with markupsafe.escape before placing them in a response."
+    },
+    "PG008": {
+        "name": "Open Redirect",
+        "category": "Open Redirect",
+        "severity": "HIGH",
+        "score": 6.5,
+        "priority": "HIGH",
+        "description": "Redirects to user-supplied destinations can send victims to attacker-controlled sites.",
+        "recommendation": "Restrict redirect targets to relative paths starting with a single slash."
     }
 }

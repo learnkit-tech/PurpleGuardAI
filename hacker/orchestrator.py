@@ -231,6 +231,9 @@ class PurpleGuardSecurityOrchestrator:
             "CODE_EXECUTION": "PG002",
             "SQL_INJECTION": "PG004",
             "PATH_TRAVERSAL": "PG006",
+            "COMMAND_INJECTION": "PG005",
+            "XSS": "PG007",
+            "OPEN_REDIRECT": "PG008",
         }
 
         return {

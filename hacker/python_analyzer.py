@@ -7,8 +7,11 @@ DANGEROUS_CALLS = {
     "eval": ("CODE_EXECUTION", "CRITICAL"),
     "exec": ("CODE_EXECUTION", "CRITICAL"),
     "os.system": ("COMMAND_INJECTION", "CRITICAL"),
+    "os.popen": ("COMMAND_INJECTION", "HIGH"),
     "subprocess.run": ("COMMAND_INJECTION", "HIGH"),
     "subprocess.call": ("COMMAND_INJECTION", "HIGH"),
+    "subprocess.check_call": ("COMMAND_INJECTION", "HIGH"),
+    "subprocess.check_output": ("COMMAND_INJECTION", "HIGH"),
     "subprocess.Popen": ("COMMAND_INJECTION", "HIGH"),
 }
 
@@ -27,6 +30,21 @@ FILE_SINKS = {
     "shutil.move": "PATH_TRAVERSAL",
 }
 
+# Rendering sinks that place attacker-controlled data into an
+# HTTP response body (reflected XSS).
+RENDER_SINKS = {
+    "Response",
+    "make_response",
+    "render_template_string",
+    "Markup",
+}
+
+# Sinks that send the visitor to an attacker-influenced
+# destination (open redirect).
+REDIRECT_SINKS = {
+    "redirect",
+}
+
 # Trick #1: re.match(pattern, variable) / re.fullmatch(pattern, variable)
 # called like: if not re.match(pattern, variable): return/raise
 WHITELIST_CHECK_FUNCTIONS = {
@@ -38,10 +56,13 @@ WHITELIST_CHECK_FUNCTIONS = {
 # if not variable.isalnum(): return/raise
 # All three check the variable itself the same way, so they share
 # one set and one piece of matching logic.
+# .is_relative_to(base) with a raise/return on failure is the
+# canonical path-confinement check for traversal sinks.
 WHITELIST_METHOD_CHECKS = {
     "isalnum",
     "isdigit",
     "isalpha",
+    "is_relative_to",
 }
 
 
@@ -64,14 +85,23 @@ def get_sink_kind(name):
     if name in DANGEROUS_CALLS:
         return name
 
-    if name in SQL_SINKS or name in FILE_SINKS:
-        return name
+    sink_groups = (
+        SQL_SINKS,
+        FILE_SINKS,
+        RENDER_SINKS,
+        REDIRECT_SINKS,
+    )
+
+    for group in sink_groups:
+        if name in group:
+            return name
 
     if "." in name:
         final_part = name.rsplit(".", 1)[-1]
 
-        if final_part in SQL_SINKS or final_part in FILE_SINKS:
-            return final_part
+        for group in sink_groups:
+            if final_part in group:
+                return final_part
 
     return name
 
@@ -237,6 +267,14 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
         # Dangerous execution sink.
         if kind in DANGEROUS_CALLS:
 
+            # A subprocess call without shell=True does not
+            # interpret its arguments, so it is not injectable.
+            if kind.startswith(
+                "subprocess."
+            ) and not self._call_has_shell_true(node):
+                self.generic_visit(node)
+                return
+
             category, severity = DANGEROUS_CALLS[kind]
 
             source = self.find_source_for_call(node)
@@ -369,7 +407,98 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
                     confirmed_flow=True,
                 )
 
+        # Response rendering sink (reflected XSS).
+        elif kind in RENDER_SINKS:
+
+            source = self.find_source_for_call(node)
+
+            if source and source.name in self.sanitized:
+                self.generic_visit(node)
+                return
+
+            sink = AttackNode(
+                id=f"SINK-{len(self.sinks) + 1}",
+                kind="SINK",
+                name=name,
+                location=self.location(node),
+                description="HTTP response rendering operation.",
+            )
+
+            self.sinks.append(sink)
+
+            if source is not None:
+
+                self.suspicious.append({
+                    "type": "XSS",
+                    "severity": "HIGH",
+                    "file": self.filepath,
+                    "line": sink.location.line,
+                    "code": sink.location.code,
+                    "sink": name,
+                    "tainted_input": True,
+                })
+
+                self.build_attack_path(
+                    source=source,
+                    sink=sink,
+                    category="XSS",
+                    severity="HIGH",
+                    confirmed_flow=True,
+                )
+
+        # Redirect sink (open redirect).
+        elif kind in REDIRECT_SINKS:
+
+            source = self.find_source_for_call(node)
+
+            if source and source.name in self.sanitized:
+                self.generic_visit(node)
+                return
+
+            sink = AttackNode(
+                id=f"SINK-{len(self.sinks) + 1}",
+                kind="SINK",
+                name=name,
+                location=self.location(node),
+                description="Redirect operation.",
+            )
+
+            self.sinks.append(sink)
+
+            if source is not None:
+
+                self.suspicious.append({
+                    "type": "OPEN_REDIRECT",
+                    "severity": "HIGH",
+                    "file": self.filepath,
+                    "line": sink.location.line,
+                    "code": sink.location.code,
+                    "sink": name,
+                    "tainted_input": True,
+                })
+
+                self.build_attack_path(
+                    source=source,
+                    sink=sink,
+                    category="OPEN_REDIRECT",
+                    severity="HIGH",
+                    confirmed_flow=True,
+                )
+
         self.generic_visit(node)
+
+    def _call_has_shell_true(self, node):
+
+        for keyword in node.keywords:
+
+            if (
+                keyword.arg == "shell"
+                and isinstance(keyword.value, ast.Constant)
+                and keyword.value.value is True
+            ):
+                return True
+
+        return False
 
     def contains_external_input(self, node):
 
@@ -379,8 +508,22 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
 
                 call_name = get_call_name(child.func)
 
+                if call_name.startswith("flask.request."):
+                    return True
+
                 if call_name.startswith("request."):
                     return True
+
+                # Bare input() reads stdin directly.
+                if call_name == "input":
+                    return True
+
+            # sys.argv and similar argv attribute access.
+            if (
+                isinstance(child, ast.Attribute)
+                and child.attr == "argv"
+            ):
+                return True
 
         return False
 
@@ -513,6 +656,31 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
             impact = (
                 "Potential unauthorized file read, write, "
                 "or deletion outside the intended directory."
+            )
+
+        elif category == "XSS":
+
+            title = (
+                "Attacker-controlled data may be reflected "
+                "into an HTTP response without escaping."
+            )
+
+            impact = (
+                "Potential reflected cross-site scripting: "
+                "attacker-controlled content may execute "
+                "in a victim's browser."
+            )
+
+        elif category == "OPEN_REDIRECT":
+
+            title = (
+                "Attacker-controlled data may control a "
+                "redirect destination."
+            )
+
+            impact = (
+                "Potential open redirect: users may be sent "
+                "to attacker-chosen external destinations."
             )
 
         else:

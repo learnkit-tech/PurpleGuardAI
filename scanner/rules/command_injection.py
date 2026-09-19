@@ -9,14 +9,53 @@ class CommandInjectionRule(Rule):
     severity = "CRITICAL"
     category = "Command Injection"
 
-    COMMAND_FUNCTIONS = {
+    # Functions that always interpret their argument as a
+    # shell command line.
+    SHELL_FUNCTIONS = {
         "system",
         "popen",
+    }
+
+    # Functions that only become shell-interpreted when
+    # shell=True is passed.
+    SUBPROCESS_FUNCTIONS = {
         "run",
         "call",
         "check_call",
         "check_output",
+        "Popen",
     }
+
+    @staticmethod
+    def _owner_name(node):
+        """Dotted name of the object a method is called on."""
+
+        if isinstance(node, ast.Name):
+            return node.id
+
+        if isinstance(node, ast.Attribute):
+            parent = CommandInjectionRule._owner_name(
+                node.value
+            )
+
+            if parent:
+                return f"{parent}.{node.attr}"
+
+            return node.attr
+
+        return ""
+
+    @staticmethod
+    def _has_shell_true(node):
+        for keyword in node.keywords:
+            if (
+                keyword.arg == "shell"
+                and isinstance(keyword.value, ast.Constant)
+                and keyword.value.value is True
+            ):
+                return True
+
+        return False
 
     def check(self, filepath, lines):
         findings = []
@@ -31,36 +70,35 @@ class CommandInjectionRule(Rule):
 
             func = node.func
 
-            # Detect os.system(...)
+            if not isinstance(func, ast.Attribute):
+                continue
+
+            owner = self._owner_name(func.value)
+            code = ast.get_source_segment(source, node)
+
+            # os.system(...) / os.popen(...) always run a shell.
             if (
-                isinstance(func, ast.Attribute)
-                and func.attr in self.COMMAND_FUNCTIONS
+                owner in ("os", "commands")
+                and func.attr in self.SHELL_FUNCTIONS
             ):
                 findings.append({
                     "id": self.id,
                     "file": filepath,
                     "line": node.lineno,
-                    "code": ast.get_source_segment(source, node),
+                    "code": code,
                 })
 
-            # Detect subprocess.run(..., shell=True)
-            if (
-                isinstance(func, ast.Attribute)
-                and func.attr == "run"
-                and isinstance(func.value, ast.Name)
-                and func.value.id == "subprocess"
+            # subprocess.*(..., shell=True) runs a shell.
+            elif (
+                owner == "subprocess"
+                and func.attr in self.SUBPROCESS_FUNCTIONS
+                and self._has_shell_true(node)
             ):
-                for keyword in node.keywords:
-                    if (
-                        keyword.arg == "shell"
-                        and isinstance(keyword.value, ast.Constant)
-                        and keyword.value.value is True
-                    ):
-                        findings.append({
-                            "id": self.id,
-                            "file": filepath,
-                            "line": node.lineno,
-                            "code": ast.get_source_segment(source, node),
-                        })
+                findings.append({
+                    "id": self.id,
+                    "file": filepath,
+                    "line": node.lineno,
+                    "code": code,
+                })
 
         return findings

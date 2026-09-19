@@ -1,16 +1,11 @@
 --- vulnerable
 +++ secure_fix
-@@ -33,6 +33,12 @@
- def read():
-     filename = request.args.get("file")
-     base_dir = Path(__file__).resolve().parent / "reports"
--    target = base_dir / filename
-+    target = (base_dir / filename).resolve()
-+    if not str(target).startswith(
-+        str(base_dir.resolve())
-+    ):
-+        raise ValueError(
-+            'Path traversal blocked: path escapes base_dir'
-+        )
-     with open(target) as f:
-         return {"content": f.read()}
+@@ -1,6 +1,7 @@
++import ast
+ import os
+ password = os.getenv("APP_PASSWORD")
+ 
+ 
+ def run(user_input):
+-    eval(user_input)
++    ast.literal_eval(user_input)

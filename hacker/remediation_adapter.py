@@ -8,12 +8,18 @@ CATEGORY_TO_RULE = {
     "CODE_EXECUTION": "PG002",
     "SQL_INJECTION": "PG004",
     "PATH_TRAVERSAL": "PG006",
+    "COMMAND_INJECTION": "PG005",
+    "XSS": "PG007",
+    "OPEN_REDIRECT": "PG008",
 }
 
 CATEGORY_LABELS = {
     "CODE_EXECUTION": "Code Injection",
     "SQL_INJECTION": "Injection",
     "PATH_TRAVERSAL": "Path Traversal",
+    "COMMAND_INJECTION": "Command Injection",
+    "XSS": "Cross-Site Scripting",
+    "OPEN_REDIRECT": "Open Redirect",
 }
 
 
@@ -270,10 +276,25 @@ class HackerRemediationAdapter:
                 "Use parameterized queries or prepared statements "
                 "so attacker-controlled input cannot alter SQL structure.",
 
+            "PG005":
+                "Invoke subprocesses with an argument list and "
+                "shell=False, quoting any argument that must pass "
+                "through a shell.",
+
             "PG006":
                 "Resolve the target path and verify it stays within "
                 "the intended base directory before opening it; "
                 "reject any path that escapes it.",
+
+            "PG007":
+                "Escape attacker-controlled content with "
+                "markupsafe.escape() before including it in a "
+                "response body.",
+
+            "PG008":
+                "Only allow redirects to relative destinations; "
+                "reject any target that starts with a scheme or "
+                "protocol-relative slashes.",
         }
 
         return recommendations.get(
@@ -296,12 +317,30 @@ class HackerRemediationAdapter:
                 "fix separates SQL structure from user input by using "
                 "a parameterized query and passing username as a parameter.",
 
+            "PG005":
+                "Attacker-controlled text reaches a shell command line. "
+                "The proposed fix passes the command as an argument "
+                "list with shell=False so input can never alter "
+                "command structure.",
+
             "PG006":
                 "Attacker-controlled input reaches a file path "
                 "operation without being confined to an allowed "
                 "directory. The proposed fix resolves the final path "
                 "and rejects it if it escapes the intended base "
                 "directory, preventing access to files outside it.",
+
+            "PG007":
+                "Attacker-controlled input is placed into the response "
+                "body without escaping. The proposed fix applies "
+                "markupsafe.escape() so the content is rendered as "
+                "text instead of executable markup.",
+
+            "PG008":
+                "Attacker-controlled input chooses the redirect "
+                "destination. The proposed fix allows only relative "
+                "destinations and rejects anything that looks like an "
+                "absolute URL or protocol-relative target.",
         }
 
         return explanations.get(

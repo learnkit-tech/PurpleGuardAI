@@ -16,6 +16,9 @@ class AttackPlanner:
         "SQL_INJECTION": "validate_sql_behavior",
         "CODE_EXECUTION": "validate_calculator",
         "PATH_TRAVERSAL": "validate_path_traversal",
+        "COMMAND_INJECTION": "validate_command_execution",
+        "XSS": "validate_xss_reflection",
+        "OPEN_REDIRECT": "validate_open_redirect",
     }
 
     def plan(self, attack_paths):

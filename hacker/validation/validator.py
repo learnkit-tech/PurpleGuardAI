@@ -1,4 +1,3 @@
-import json
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -18,7 +17,28 @@ class LocalAttackValidator:
 
         try:
 
-            with urllib.request.urlopen(
+            # Redirects are never followed: an open-redirect check
+            # must read the server's own Location header instead.
+            class _NoRedirect(
+                urllib.request.HTTPRedirectHandler
+            ):
+
+                def redirect_request(
+                    self,
+                    req,
+                    fp,
+                    code,
+                    msg,
+                    headers,
+                    newurl,
+                ):
+                    return None
+
+            no_redirect_opener = urllib.request.build_opener(
+                _NoRedirect
+            )
+
+            with no_redirect_opener.open(
                 url,
                 timeout=5,
             ) as response:
@@ -30,6 +50,7 @@ class LocalAttackValidator:
                 return {
                     "status": response.status,
                     "body": body,
+                    "headers": dict(response.headers),
                     "error": None,
                     "url": url,
                 }
@@ -43,6 +64,7 @@ class LocalAttackValidator:
             return {
                 "status": exc.code,
                 "body": body,
+                "headers": dict(exc.headers or {}),
                 "error": str(exc),
                 "url": url,
             }
@@ -52,6 +74,7 @@ class LocalAttackValidator:
             return {
                 "status": None,
                 "body": "",
+                "headers": {},
                 "error": str(exc),
                 "url": url,
             }
@@ -195,10 +218,155 @@ class LocalAttackValidator:
             ),
         }
 
-    def validate_all(self):
+    def validate_command_execution(self):
+
+        """
+        Controlled validation of a command-injection sink.
+
+        The payload only injects an extra harmless echo that writes
+        to standard output. It proves that attacker-controlled text
+        was interpreted by a shell - and it never touches the
+        filesystem or runs any destructive command.
+        """
+
+        marker = "PURPLEGUARD_CMD_MARKER"
+
+        # Leading with the harmless "true" builtin keeps the payload
+        # syntactically valid whether the sink uses the input as the
+        # whole command line or appends it to a fixed command.
+        payload = f"true; echo {marker}"
+
+        result = self.request(
+            "/run",
+            {
+                "command": payload
+            },
+        )
+
+        body = result.get("body", "")
+
+        # The vulnerable endpoint executes the command and returns
+        # its combined output. The shell-injected echo makes the
+        # marker appear in that output.
+        validated = marker in body
 
         return {
-            "calculator": self.validate_calculator(),
-            "sql": self.validate_sql_behavior(),
-            "path_traversal": self.validate_path_traversal(),
+            "attack": "COMMAND_INJECTION",
+            "payload": payload,
+            "request": result,
+            "validated": validated,
+            "evidence": (
+                "Server executed attacker-controlled shell input."
+                if validated
+                else
+                "Controlled input did not demonstrate "
+                "command execution."
+            ),
+        }
+
+    def validate_xss_reflection(self):
+
+        """
+        Controlled reflected-XSS validation.
+
+        The payload is a unique, harmless marker string. The check
+        is purely behavioral: the marker is reflected verbatim into
+        the response body (no HTML entity encoding applied).
+        No scripting is involved.
+        """
+
+        # The marker includes HTML-special characters on purpose:
+        # an escaping fix turns them into HTML entities, so a raw
+        # reflection proves output encoding is missing while an
+        # encoded reflection proves the fix works.
+        marker = "<pgxss-7f3a9b2c4e>"
+
+        result = self.request(
+            "/greet",
+            {
+                "name": marker
+            },
+        )
+
+        body = result.get("body", "")
+
+        reflected_raw = marker in body
+        reflected_encoded = (
+            "&lt;" in body
+            or "&amp;" in body
+            or "&#x" in body
+        )
+
+        validated = (
+            reflected_raw
+            and not reflected_encoded
+        )
+
+        return {
+            "attack": "XSS",
+            "payload": marker,
+            "request": result,
+            "validated": validated,
+            "evidence": (
+                "Marker reflected into the response body "
+                "without HTML encoding."
+                if validated
+                else
+                "Reflection was escaped or absent; no "
+                "confirmed XSS reflection."
+            ),
+        }
+
+    def validate_open_redirect(self):
+
+        """
+        Controlled open-redirect validation.
+
+        Sends a redirect target on a non-routable TEST-NET host and
+        never follows the redirect. Confirmation is based purely on
+        the Location header the server itself returns.
+        """
+
+        import re
+
+        payload = "http://192.0.2.77/next"
+
+        result = self.request(
+            "/go",
+            {
+                "next": payload
+            },
+        )
+
+        status = result.get("status")
+
+        location = result.get("headers", {}).get(
+            "Location",
+            "",
+        )
+
+        redirected_out = (
+            location == payload
+            or bool(
+                location
+                and re.match(
+                    r"^https?://192\.0\.2\.77",
+                    location,
+                )
+            )
+        )
+
+        return {
+            "attack": "OPEN_REDIRECT",
+            "payload": payload,
+            "request": result,
+            "validated": redirected_out,
+            "evidence": (
+                "Server returned a redirect to an "
+                "attacker-chosen absolute URL."
+                if redirected_out
+                else
+                "Server did not redirect to the "
+                "attacker-controlled destination."
+            ),
         }

@@ -21,6 +21,15 @@ class HackerReverification:
 
         "validate_path_traversal":
             "validate_path_traversal",
+
+        "validate_command_execution":
+            "validate_command_execution",
+
+        "validate_xss_reflection":
+            "validate_xss_reflection",
+
+        "validate_open_redirect":
+            "validate_open_redirect",
     }
 
     def __init__(self, base_url):

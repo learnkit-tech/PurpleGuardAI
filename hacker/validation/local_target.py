@@ -114,12 +114,13 @@ class LocalTarget:
 
             try:
 
+                # Any HTTP response proves the server is up.
+                # Do not assume the target exposes any specific
+                # route for healthchecking.
                 with urllib.request.urlopen(
-                    self.base_url
-                    + "/search?username=__purpleguard_healthcheck__",
+                    self.base_url,
                     timeout=1,
                 ) as response:
-
                     return {
                         "status": "STARTED",
                         "host": self.host,
@@ -127,6 +128,18 @@ class LocalTarget:
                         "pid": self.process.pid,
                         "base_url": self.base_url,
                     }
+
+            except urllib.error.HTTPError:
+
+                # An HTTP error status still proves the HTTP
+                # server is running and answering requests.
+                return {
+                    "status": "STARTED",
+                    "host": self.host,
+                    "port": self.port,
+                    "pid": self.process.pid,
+                    "base_url": self.base_url,
+                }
 
             except (
                 urllib.error.URLError,

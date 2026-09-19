@@ -39,6 +39,15 @@ class FindingBuilder:
 
         "SQL_INJECTION":
             "Attacker-controlled input reaches a dynamic SQL query.",
+
+        "COMMAND_INJECTION":
+            "Attacker-controlled input reaches shell command execution.",
+
+        "XSS":
+            "Attacker-controlled input is reflected into an HTTP response without escaping.",
+
+        "OPEN_REDIRECT":
+            "Attacker-controlled input controls a redirect destination.",
     }
 
     IMPACTS = {
@@ -47,6 +56,15 @@ class FindingBuilder:
 
         "SQL_INJECTION":
             "An attacker may be able to manipulate database queries and access or alter database data.",
+
+        "COMMAND_INJECTION":
+            "An attacker may be able to execute arbitrary operating-system commands on the host.",
+
+        "XSS":
+            "An attacker may be able to run script in a victim's browser, enabling session theft or defacement.",
+
+        "OPEN_REDIRECT":
+            "An attacker may be able to redirect users to attacker-chosen destinations for phishing.",
     }
 
     def build(self, attack_paths, plans, validations):
