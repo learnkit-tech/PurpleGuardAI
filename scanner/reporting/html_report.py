@@ -98,6 +98,11 @@ Low: {severity_count.get("LOW", 0)}
 
     for finding in findings:
 
+        recommendation = finding.get(
+            "recommendation",
+            finding.get("description", "Review manually."),
+        )
+
         html += f"""
 <tr>
 <td>{finding['id']}</td>
@@ -105,7 +110,7 @@ Low: {severity_count.get("LOW", 0)}
 <td>{finding['file']}</td>
 <td>{finding['line']}</td>
 <td>{finding['severity']}</td>
-<td>{finding['recommendation']}</td>
+<td>{recommendation}</td>
 </tr>
 """
 
