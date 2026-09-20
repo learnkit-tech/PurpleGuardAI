@@ -48,6 +48,9 @@ class FindingBuilder:
 
         "OPEN_REDIRECT":
             "Attacker-controlled input controls a redirect destination.",
+
+        "SSRF":
+            "Attacker-controlled input controls an outbound request destination.",
     }
 
     IMPACTS = {
@@ -65,6 +68,9 @@ class FindingBuilder:
 
         "OPEN_REDIRECT":
             "An attacker may be able to redirect users to attacker-chosen destinations for phishing.",
+
+        "SSRF":
+            "An attacker may be able to reach internal services, cloud metadata endpoints, or arbitrary hosts through the server.",
     }
 
     def build(self, attack_paths, plans, validations):

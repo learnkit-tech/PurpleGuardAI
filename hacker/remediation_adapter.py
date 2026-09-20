@@ -11,6 +11,7 @@ CATEGORY_TO_RULE = {
     "COMMAND_INJECTION": "PG005",
     "XSS": "PG007",
     "OPEN_REDIRECT": "PG008",
+    "SSRF": "PG009",
 }
 
 CATEGORY_LABELS = {
@@ -20,6 +21,7 @@ CATEGORY_LABELS = {
     "COMMAND_INJECTION": "Command Injection",
     "XSS": "Cross-Site Scripting",
     "OPEN_REDIRECT": "Open Redirect",
+    "SSRF": "SSRF",
 }
 
 
@@ -88,11 +90,26 @@ class HackerRemediationAdapter:
         }
 
     def adapt_all(self, findings):
-        return [
-            self.adapt(finding)
-            for finding in findings
-            if finding.validated
-        ]
+        adapted = []
+
+        for finding in findings:
+
+            if not finding.validated:
+                continue
+
+            item = self.adapt(finding)
+
+            # Findings whose class has no safe automated fix (for
+            # example SSRF allowlists, which are application-
+            # specific) are surfaced for manual review instead of
+            # being handed to remediation, where they would fail
+            # the whole file group.
+            if item["id"] not in self.patcher.AUTO_FIXABLE:
+                item["review_required"] = True
+
+            adapted.append(item)
+
+        return adapted
 
     def preview_all(self, findings):
         """

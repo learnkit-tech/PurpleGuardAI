@@ -1,6 +1,7 @@
 from pathlib import Path
 
-APP = '''from pathlib import Path
+APP = '''import urllib.request
+from pathlib import Path
 from flask import Flask, request
 import sqlite3
 
@@ -41,6 +42,16 @@ def read():
     target = base_dir / filename
     with open(target) as f:
         return {"content": f.read()}
+
+
+@app.route("/fetch")
+def fetch():
+    url = request.args.get("url")
+    try:
+        response = urllib.request.urlopen(url, timeout=2)
+        return {"status": response.status, "body": response.read().decode()}
+    except Exception as exc:
+        return {"error": f"{url}: {exc}"}
 '''
 
 Path(__file__).with_name("app.py").write_text(APP)

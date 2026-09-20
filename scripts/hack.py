@@ -173,6 +173,9 @@ def main():
 
             "validate_open_redirect":
                 validator.validate_open_redirect,
+
+            "validate_ssrf":
+                validator.validate_ssrf,
         }
 
         for plan in plans:

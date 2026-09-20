@@ -2,10 +2,16 @@ from markupsafe import escape
 import shlex
 import os
 import subprocess
+import urllib.request
 from pathlib import Path
 from flask import Flask, Response, redirect, request
 
 app = Flask(__name__)
+
+# PG009 (SSRF) remediated by hand: the review queue flagged the
+# unvalidated outbound fetch and this allowlist was chosen by the
+# developer.
+ALLOWED_FETCH_PREFIX = "https://api.internal.example"
 
 
 @app.route("/run")
@@ -52,3 +58,12 @@ def jump():
             'Open redirect blocked: only relative redirect targets are allowed'
         )
     return redirect(destination)
+
+
+@app.route("/fetch")
+def fetch():
+    url = request.args.get("url")
+    if not url or not url.startswith(ALLOWED_FETCH_PREFIX):
+        raise ValueError("SSRF blocked: destination not allowed")
+    response = urllib.request.urlopen(url, timeout=2)
+    return {"status": response.status, "body": response.read().decode()}

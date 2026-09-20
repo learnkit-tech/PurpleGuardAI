@@ -45,6 +45,18 @@ REDIRECT_SINKS = {
     "redirect",
 }
 
+# Outbound request sinks where the destination is
+# attacker-influenced (server-side request forgery).
+SSRF_SINKS = {
+    "urlopen",
+    "requests.get",
+    "requests.post",
+    "requests.put",
+    "requests.request",
+    "httpx.get",
+    "httpx.post",
+}
+
 # Trick #1: re.match(pattern, variable) / re.fullmatch(pattern, variable)
 # called like: if not re.match(pattern, variable): return/raise
 WHITELIST_CHECK_FUNCTIONS = {
@@ -90,6 +102,7 @@ def get_sink_kind(name):
         FILE_SINKS,
         RENDER_SINKS,
         REDIRECT_SINKS,
+        SSRF_SINKS,
     )
 
     for group in sink_groups:
@@ -442,6 +455,48 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
                     source=source,
                     sink=sink,
                     category="XSS",
+                    severity="HIGH",
+                    confirmed_flow=True,
+                )
+
+        # Outbound request sink (server-side request forgery).
+        elif kind in SSRF_SINKS:
+
+            source = self.find_source_for_call(node)
+
+            if source and source.name in self.sanitized:
+                self.generic_visit(node)
+                return
+
+            sink = AttackNode(
+                id=f"SINK-{len(self.sinks) + 1}",
+                kind="SINK",
+                name=name,
+                location=self.location(node),
+                description=(
+                    "Outbound request to an "
+                    "attacker-influenced destination."
+                ),
+            )
+
+            self.sinks.append(sink)
+
+            if source is not None:
+
+                self.suspicious.append({
+                    "type": "SSRF",
+                    "severity": "HIGH",
+                    "file": self.filepath,
+                    "line": sink.location.line,
+                    "code": sink.location.code,
+                    "sink": name,
+                    "tainted_input": True,
+                })
+
+                self.build_attack_path(
+                    source=source,
+                    sink=sink,
+                    category="SSRF",
                     severity="HIGH",
                     confirmed_flow=True,
                 )

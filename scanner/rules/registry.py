@@ -6,6 +6,7 @@ from scanner.rules.command_injection import CommandInjectionRule
 from scanner.rules.path_traversal import PathTraversalRule
 from scanner.rules.xss import XSSRule
 from scanner.rules.open_redirect import OpenRedirectRule
+from scanner.rules.ssrf import SSRFRule
 
 
 RULES = [
@@ -16,5 +17,6 @@ RULES = [
     CommandInjectionRule(),
     PathTraversalRule(),
     XSSRule(),
-    OpenRedirectRule()
+    OpenRedirectRule(),
+    SSRFRule()
 ]

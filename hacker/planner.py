@@ -19,6 +19,7 @@ class AttackPlanner:
         "COMMAND_INJECTION": "validate_command_execution",
         "XSS": "validate_xss_reflection",
         "OPEN_REDIRECT": "validate_open_redirect",
+        "SSRF": "validate_ssrf",
     }
 
     def plan(self, attack_paths):

@@ -15,3 +15,8 @@ env/
 
 # Reports
 reports/*.json
+
+# Build artifacts
+*.egg-info/
+build/
+dist/

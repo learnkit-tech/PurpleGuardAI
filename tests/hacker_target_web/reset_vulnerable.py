@@ -2,6 +2,7 @@ from pathlib import Path
 
 APP = '''import os
 import subprocess
+import urllib.request
 from pathlib import Path
 from flask import Flask, Response, redirect, request
 
@@ -44,6 +45,16 @@ def go():
 def jump():
     destination = request.args.get("to")
     return redirect(destination)
+
+
+@app.route("/fetch")
+def fetch():
+    url = request.args.get("url")
+    try:
+        response = urllib.request.urlopen(url, timeout=2)
+        return {"status": response.status, "body": response.read().decode()}
+    except Exception as exc:
+        return {"error": f"{url}: {exc}"}
 '''
 
 Path(__file__).with_name("web_app.py").write_text(APP)

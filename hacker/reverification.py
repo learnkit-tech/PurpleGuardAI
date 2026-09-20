@@ -30,6 +30,9 @@ class HackerReverification:
 
         "validate_open_redirect":
             "validate_open_redirect",
+
+        "validate_ssrf":
+            "validate_ssrf",
     }
 
     def __init__(self, base_url):

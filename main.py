@@ -215,6 +215,95 @@ def run_secure(target, approved=False):
     return result
 
 
+def run_review(target):
+    print("\n🛡️ PurpleGuardAI Review Queue")
+    print("=============================")
+
+    session = DeveloperSession(target)
+
+    report = session.scan()
+    findings = report.get("findings", [])
+
+    if not findings:
+        print("\n✓ No vulnerabilities detected.")
+        return
+
+    patcher = CodePatcher()
+
+    auto_fixable = []
+    requires_review = []
+
+    for finding in findings:
+        if patcher.can_auto_fix(finding):
+            auto_fixable.append(finding)
+        else:
+            requires_review.append(finding)
+
+    print(
+        f"\nDetected: {len(findings)} finding(s) "
+        f"({len(auto_fixable)} auto-fixable, "
+        f"{len(requires_review)} requiring review)\n"
+    )
+
+    if auto_fixable:
+        print(
+            "Auto-fixable "
+            "(run: python main.py secure "
+            f"{target} --approve)"
+        )
+
+        for finding in auto_fixable:
+            print(
+                f"  ✓ [{finding['id']}] "
+                f"{finding.get('name')} "
+                f"({finding.get('severity')})"
+            )
+            print(
+                f"    {finding.get('file')}"
+                f":{finding.get('line')}"
+            )
+            print(
+                f"    {finding.get('code')}"
+            )
+
+        print()
+
+    if requires_review:
+        print(
+            "Requires manual review "
+            "(no safe automated fix):"
+        )
+
+        for finding in requires_review:
+            print(
+                f"  ⚠️ [{finding['id']}] "
+                f"{finding.get('name')} "
+                f"({finding.get('severity')})"
+            )
+            print(
+                f"    {finding.get('file')}"
+                f":{finding.get('line')}"
+            )
+
+            code = finding.get("code")
+
+            if code:
+                print(
+                    f"    {code}"
+                )
+
+            print(
+                f"    {finding.get('recommendation')}"
+            )
+
+        print()
+    else:
+        print(
+            "✓ No findings require "
+            "manual review."
+        )
+
+
 def run_rollback(target):
     print("\n🛡️ PurpleGuardAI Rollback")
     print("=========================")
@@ -323,6 +412,24 @@ rollback_parser.add_argument(
 
 
 # -------------------------
+# REVIEW COMMAND
+# -------------------------
+
+review_parser = subparsers.add_parser(
+    "review",
+    help=(
+        "Show which findings are auto-fixable "
+        "and which need manual review"
+    )
+)
+
+review_parser.add_argument(
+    "target",
+    help="Directory to review"
+)
+
+
+# -------------------------
 # COMMAND DISPATCH
 # -------------------------
 
@@ -354,6 +461,12 @@ elif args.command == "secure":
 elif args.command == "rollback":
 
     run_rollback(
+        args.target
+    )
+
+elif args.command == "review":
+
+    run_review(
         args.target
     )
 

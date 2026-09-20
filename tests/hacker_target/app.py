@@ -1,4 +1,5 @@
 import ast
+import urllib.request
 from pathlib import Path
 from flask import Flask, request
 import sqlite3
@@ -40,3 +41,13 @@ def read():
         )
     with open(target) as f:
         return {"content": f.read()}
+
+
+@app.route("/fetch")
+def fetch():
+    url = request.args.get("url")
+    try:
+        response = urllib.request.urlopen(url, timeout=2)
+        return {"status": response.status, "body": response.read().decode()}
+    except Exception as exc:
+        return {"error": str(exc)}

@@ -385,11 +385,44 @@ class PurpleGuardSecurityOrchestrator:
             findings
         )
 
+        # Findings without a safe automated fix (review_required
+        # set by the adapter) are surfaced for manual review and
+        # excluded from remediation, where they would otherwise
+        # fail their whole file group.
+        requires_review = [
+            finding
+            for finding in remediation_findings
+            if finding.get("review_required")
+        ]
+
+        to_remediate = [
+            finding
+            for finding in remediation_findings
+            if not finding.get("review_required")
+        ]
+
         result["remediation"] = {
             "available": len(
-                remediation_findings
+                to_remediate
             ),
             "approved": approved,
+            "requires_review": [
+                {
+                    "finding_id": finding["hacker"][
+                        "finding_id"
+                    ],
+                    "rule_id": finding["id"],
+                    "category": finding["hacker"][
+                        "category"
+                    ],
+                    "file": finding["file"],
+                    "line": finding["line"],
+                    "recommendation": finding.get(
+                        "recommendation"
+                    ),
+                }
+                for finding in requires_review
+            ],
             "previews": remediation_previews,
         }
 
@@ -413,7 +446,7 @@ class PurpleGuardSecurityOrchestrator:
         # =================================================
 
         remediation_result = self.remediate(
-            remediation_findings,
+            to_remediate,
             approved=True
         )
 

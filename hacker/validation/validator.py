@@ -370,3 +370,54 @@ class LocalAttackValidator:
                 "attacker-controlled destination."
             ),
         }
+
+    def validate_ssrf(self):
+
+        """
+        Controlled SSRF validation against the local /fetch
+        endpoint.
+
+        Asks the server to fetch a TEST-NET address that cannot
+        exist in the sandbox. Confirmation is a response body
+        marker emitted by the vulnerable endpoint's own error
+        handler, proving the server attempted the attacker-chosen
+        destination. No external network access is performed.
+        """
+
+        import re
+
+        payload = "http://192.0.2.99/metadata"
+
+        result = self.request(
+            "/fetch",
+            {
+                "url": payload
+            },
+        )
+
+        body = result.get("body", "")
+
+        # The vulnerable endpoint surfaces the failed outbound
+        # request's error text; the TEST-NET host name in the
+        # response proves the server tried the attacker URL.
+        fetched_attacker_url = bool(
+            re.search(
+                r"192\.0\.2\.99",
+                body,
+            )
+        )
+
+        return {
+            "attack": "SSRF",
+            "payload": payload,
+            "request": result,
+            "validated": fetched_attacker_url,
+            "evidence": (
+                "Server attempted a request to the "
+                "attacker-controlled destination."
+                if fetched_attacker_url
+                else
+                "Server did not attempt the "
+                "attacker-controlled destination."
+            ),
+        }

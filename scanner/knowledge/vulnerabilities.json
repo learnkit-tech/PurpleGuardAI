@@ -73,5 +73,14 @@
         "priority": "HIGH",
         "description": "Redirects to user-supplied destinations can send victims to attacker-controlled sites.",
         "recommendation": "Restrict redirect targets to relative paths starting with a single slash."
+    },
+    "PG009": {
+        "name": "SSRF",
+        "category": "SSRF",
+        "severity": "HIGH",
+        "score": 8.0,
+        "priority": "HIGH",
+        "description": "Outbound requests built from user-controlled URLs can reach internal services, cloud metadata endpoints, or arbitrary hosts.",
+        "recommendation": "Validate the destination against a strict allowlist of trusted hosts or URL prefixes before making the request; block non-HTTP schemes and private/internal addresses."
     }
 }

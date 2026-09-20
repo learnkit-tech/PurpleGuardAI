@@ -5,8 +5,8 @@
 +import shlex
  import os
  import subprocess
- from pathlib import Path
-@@ -9,36 +11,44 @@
+ import urllib.request
+@@ -10,38 +12,46 @@
  @app.route("/run")
  def run():
      command = request.args.get("command")
@@ -55,3 +55,5 @@
 +            'Open redirect blocked: only relative redirect targets are allowed'
 +        )
      return redirect(destination)
+ 
+ 
