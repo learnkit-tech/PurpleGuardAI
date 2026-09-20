@@ -12,6 +12,7 @@ CATEGORY_TO_RULE = {
     "XSS": "PG007",
     "OPEN_REDIRECT": "PG008",
     "SSRF": "PG009",
+    "DESERIALIZATION": "PG010",
 }
 
 CATEGORY_LABELS = {
@@ -22,6 +23,7 @@ CATEGORY_LABELS = {
     "XSS": "Cross-Site Scripting",
     "OPEN_REDIRECT": "Open Redirect",
     "SSRF": "SSRF",
+    "DESERIALIZATION": "Insecure Deserialization",
 }
 
 
@@ -312,6 +314,13 @@ class HackerRemediationAdapter:
                 "Only allow redirects to relative destinations; "
                 "reject any target that starts with a scheme or "
                 "protocol-relative slashes.",
+
+            "PG010":
+                "Do not deserialize untrusted data with pickle or "
+                "dill. Use a data-only format such as JSON, or "
+                "restrict deserialization with a RestrictedUnpickler "
+                "subclass whose find_class only permits explicitly "
+                "allowlisted modules.",
         }
 
         return recommendations.get(
@@ -358,6 +367,14 @@ class HackerRemediationAdapter:
                 "destination. The proposed fix allows only relative "
                 "destinations and rejects anything that looks like an "
                 "absolute URL or protocol-relative target.",
+
+            "PG010":
+                "Attacker-controlled bytes reach pickle/dill "
+                "deserialization, which can reconstruct arbitrary "
+                "objects and execute code. No automated fix is "
+                "proposed: the safe remediation (a restricted "
+                "unpickler or a data-format migration) is "
+                "application-specific and must be reviewed.",
         }
 
         return explanations.get(

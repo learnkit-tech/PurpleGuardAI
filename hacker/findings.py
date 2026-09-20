@@ -51,6 +51,9 @@ class FindingBuilder:
 
         "SSRF":
             "Attacker-controlled input controls an outbound request destination.",
+
+        "DESERIALIZATION":
+            "Attacker-controlled input is deserialized into arbitrary objects.",
     }
 
     IMPACTS = {
@@ -71,6 +74,9 @@ class FindingBuilder:
 
         "SSRF":
             "An attacker may be able to reach internal services, cloud metadata endpoints, or arbitrary hosts through the server.",
+
+        "DESERIALIZATION":
+            "An attacker may be able to execute arbitrary code by supplying crafted serialized data that reconstructs attacker-chosen objects.",
     }
 
     def build(self, attack_paths, plans, validations):

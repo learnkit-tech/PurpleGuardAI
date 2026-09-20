@@ -82,5 +82,14 @@
         "priority": "HIGH",
         "description": "Outbound requests built from user-controlled URLs can reach internal services, cloud metadata endpoints, or arbitrary hosts.",
         "recommendation": "Validate the destination against a strict allowlist of trusted hosts or URL prefixes before making the request; block non-HTTP schemes and private/internal addresses."
+    },
+    "PG010": {
+        "name": "Insecure Deserialization",
+        "category": "Insecure Deserialization",
+        "severity": "HIGH",
+        "score": 8.5,
+        "priority": "HIGH",
+        "description": "Deserializing attacker-controlled data with pickle or dill can reconstruct arbitrary objects and execute attacker-chosen code through the __reduce__ mechanism.",
+        "recommendation": "Do not deserialize untrusted data with pickle or dill. Use a data-only format such as JSON, or restrict deserialization to a RestrictedUnpickler subclass whose find_class only permits explicitly allowlisted modules."
     }
 }

@@ -176,6 +176,9 @@ def main():
 
             "validate_ssrf":
                 validator.validate_ssrf,
+
+            "validate_deserialization":
+                validator.validate_deserialization,
         }
 
         for plan in plans:

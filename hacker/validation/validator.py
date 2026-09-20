@@ -1,3 +1,4 @@
+import pickle
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -8,7 +9,7 @@ class LocalAttackValidator:
     def __init__(self, base_url):
         self.base_url = base_url.rstrip("/")
 
-    def request(self, path, params=None):
+    def request(self, path, params=None, data=None):
 
         url = self.base_url + path
 
@@ -38,8 +39,20 @@ class LocalAttackValidator:
                 _NoRedirect
             )
 
+            target = url
+
+            if data is not None:
+
+                # Supplying raw bytes turns the request into a
+                # POST body, which is how serialized payloads are
+                # delivered to deserialization sinks.
+                target = urllib.request.Request(
+                    url,
+                    data=data,
+                )
+
             with no_redirect_opener.open(
-                url,
+                target,
                 timeout=5,
             ) as response:
 
@@ -78,6 +91,54 @@ class LocalAttackValidator:
                 "error": str(exc),
                 "url": url,
             }
+
+    def validate_deserialization(self):
+
+        """
+        Controlled insecure-deserialization validation against the
+        local /load endpoint.
+
+        Sends a pickle payload containing ONLY a plain dictionary
+        with a unique marker. The endpoint's echo of the deserialized
+        object proves the server reconstructs objects from
+        attacker-supplied serialized bytes. Deliberately data-only:
+        a __reduce__ payload would prove code execution, but the
+        project never executes destructive proof payloads when a
+        harmless behavioral marker is sufficient.
+        """
+
+        marker = "PURPLEGUARD-PG10-MARKER"
+
+        payload = pickle.dumps(
+            {"pg": marker}
+        )
+
+        result = self.request(
+            "/load",
+            data=payload,
+        )
+
+        body = result.get("body", "")
+
+        deserialized = marker in body
+
+        return {
+            "attack": "DESERIALIZATION",
+            "payload": (
+                "pickle.dumps({'pg': '" + marker + "'})"
+            ),
+            "request": result,
+            "validated": deserialized,
+            "evidence": (
+                "Server deserialized attacker-controlled "
+                "serialized data and reconstructed the "
+                "attacker-supplied object."
+                if deserialized
+                else
+                "Server did not deserialize the "
+                "attacker-controlled payload."
+            ),
+        }
 
     def validate_calculator(self):
 

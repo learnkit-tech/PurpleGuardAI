@@ -57,6 +57,15 @@ SSRF_SINKS = {
     "httpx.post",
 }
 
+# Deserialization sinks that reconstruct attacker-controlled
+# objects and can execute code through __reduce__.
+DESERIALIZATION_SINKS = {
+    "pickle.loads",
+    "pickle.load",
+    "dill.loads",
+    "dill.load",
+}
+
 # Trick #1: re.match(pattern, variable) / re.fullmatch(pattern, variable)
 # called like: if not re.match(pattern, variable): return/raise
 WHITELIST_CHECK_FUNCTIONS = {
@@ -103,6 +112,7 @@ def get_sink_kind(name):
         RENDER_SINKS,
         REDIRECT_SINKS,
         SSRF_SINKS,
+        DESERIALIZATION_SINKS,
     )
 
     for group in sink_groups:
@@ -501,6 +511,48 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
                     confirmed_flow=True,
                 )
 
+        # Deserialization sink (insecure deserialization).
+        elif kind in DESERIALIZATION_SINKS:
+
+            source = self.find_source_for_call(node)
+
+            if source and source.name in self.sanitized:
+                self.generic_visit(node)
+                return
+
+            sink = AttackNode(
+                id=f"SINK-{len(self.sinks) + 1}",
+                kind="SINK",
+                name=name,
+                location=self.location(node),
+                description=(
+                    "Deserialization of attacker-influenced "
+                    "data."
+                ),
+            )
+
+            self.sinks.append(sink)
+
+            if source is not None:
+
+                self.suspicious.append({
+                    "type": "DESERIALIZATION",
+                    "severity": "HIGH",
+                    "file": self.filepath,
+                    "line": sink.location.line,
+                    "code": sink.location.code,
+                    "sink": name,
+                    "tainted_input": True,
+                })
+
+                self.build_attack_path(
+                    source=source,
+                    sink=sink,
+                    category="DESERIALIZATION",
+                    severity="HIGH",
+                    confirmed_flow=True,
+                )
+
         # Redirect sink (open redirect).
         elif kind in REDIRECT_SINKS:
 
@@ -736,6 +788,19 @@ class PythonSecurityAnalyzer(ast.NodeVisitor):
             impact = (
                 "Potential open redirect: users may be sent "
                 "to attacker-chosen external destinations."
+            )
+
+        elif category == "DESERIALIZATION":
+
+            title = (
+                "Attacker-controlled data may be deserialized "
+                "into arbitrary objects."
+            )
+
+            impact = (
+                "Potential remote code execution: pickle and "
+                "dill can reconstruct attacker-chosen objects "
+                "and execute code through __reduce__."
             )
 
         else:

@@ -20,6 +20,7 @@ class AttackPlanner:
         "XSS": "validate_xss_reflection",
         "OPEN_REDIRECT": "validate_open_redirect",
         "SSRF": "validate_ssrf",
+        "DESERIALIZATION": "validate_deserialization",
     }
 
     def plan(self, attack_paths):

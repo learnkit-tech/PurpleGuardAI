@@ -42,6 +42,7 @@ Final security verdict
 | PG007 | Cross-Site Scripting | HIGH   | Yes      |
 | PG008 | Open Redirect      | HIGH     | Yes      |
 | PG009 | SSRF               | HIGH     | No - manual review |
+| PG010 | Insecure Deserialization | HIGH | No - manual review |
 
 ## Auto-fix policy
 
@@ -65,6 +66,11 @@ Examples of supported transformations:
 SSRF (PG009) is intentionally never auto-fixed: destination
 allowlists are application-specific, so the finding is surfaced for
 manual review with a recommendation instead.
+
+Insecure deserialization (PG010) is likewise never auto-fixed:
+safe remediation means a RestrictedUnpickler with an explicit
+global allowlist or a migration to a data-only format such as
+JSON - both are application-specific decisions.
 
 ## The Hacker engine
 
@@ -152,7 +158,7 @@ python scripts/check_packaging.py   # packaging sanity check
 main.py                     CLI entry point (scan/secure/rollback/review)
 purpleguard_cli.py          console-script wrapper for the installed CLI
 scanner/
-  rules/                    static detection rules (PG001-PG009)
+  rules/                    static detection rules (PG001-PG010)
   knowledge/                rule metadata and recommendations
   remediation/              patcher, workflow, diffs
   verification/             static rescan, tests, final verdict

@@ -234,6 +234,8 @@ class PurpleGuardSecurityOrchestrator:
             "COMMAND_INJECTION": "PG005",
             "XSS": "PG007",
             "OPEN_REDIRECT": "PG008",
+            "SSRF": "PG009",
+            "DESERIALIZATION": "PG010",
         }
 
         return {

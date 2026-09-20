@@ -33,6 +33,9 @@ class HackerReverification:
 
         "validate_ssrf":
             "validate_ssrf",
+
+        "validate_deserialization":
+            "validate_deserialization",
     }
 
     def __init__(self, base_url):

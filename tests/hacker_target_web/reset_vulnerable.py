@@ -1,6 +1,7 @@
 from pathlib import Path
 
 APP = '''import os
+import pickle
 import subprocess
 import urllib.request
 from pathlib import Path
@@ -55,6 +56,16 @@ def fetch():
         return {"status": response.status, "body": response.read().decode()}
     except Exception as exc:
         return {"error": f"{url}: {exc}"}
+
+
+@app.route("/load", methods=["POST"])
+def load():
+    data = request.get_data()
+    try:
+        obj = pickle.loads(data)
+        return {"loaded": str(obj)}
+    except Exception as exc:
+        return {"error": f"deserialization failed: {exc}"}
 '''
 
 Path(__file__).with_name("web_app.py").write_text(APP)

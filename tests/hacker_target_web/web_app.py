@@ -1,4 +1,6 @@
 from markupsafe import escape
+import io
+import pickle
 import shlex
 import os
 import subprocess
@@ -67,3 +69,24 @@ def fetch():
         raise ValueError("SSRF blocked: destination not allowed")
     response = urllib.request.urlopen(url, timeout=2)
     return {"status": response.status, "body": response.read().decode()}
+
+
+# PG010 (Insecure Deserialization) remediated by hand: the review
+# queue flagged the unvalidated pickle.loads and this restricted
+# unpickler was chosen by the developer. find_class rejects every
+# global, so no attacker-chosen code can ever be reconstructed.
+class SafeUnpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        raise pickle.UnpicklingError(
+            f"forbidden global: {module}.{name}"
+        )
+
+
+@app.route("/load", methods=["POST"])
+def load():
+    data = request.get_data()
+    try:
+        obj = SafeUnpickler(io.BytesIO(data)).load()
+    except pickle.UnpicklingError as exc:
+        return {"error": f"deserialization blocked: {exc}"}, 400
+    return {"loaded": str(obj)}

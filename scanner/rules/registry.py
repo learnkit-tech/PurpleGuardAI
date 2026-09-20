@@ -7,6 +7,7 @@ from scanner.rules.path_traversal import PathTraversalRule
 from scanner.rules.xss import XSSRule
 from scanner.rules.open_redirect import OpenRedirectRule
 from scanner.rules.ssrf import SSRFRule
+from scanner.rules.deserialization import InsecureDeserializationRule
 
 
 RULES = [
@@ -18,5 +19,6 @@ RULES = [
     PathTraversalRule(),
     XSSRule(),
     OpenRedirectRule(),
-    SSRFRule()
+    SSRFRule(),
+    InsecureDeserializationRule()
 ]
