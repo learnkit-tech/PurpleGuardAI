@@ -315,6 +315,12 @@ class HackerRemediationAdapter:
                 "reject any target that starts with a scheme or "
                 "protocol-relative slashes.",
 
+            "PG009":
+                "Validate the destination against a strict allowlist "
+                "of trusted hosts or URL prefixes before making the "
+                "request; block non-HTTP schemes and private/internal "
+                "addresses.",
+
             "PG010":
                 "Do not deserialize untrusted data with pickle or "
                 "dill. Use a data-only format such as JSON, or "

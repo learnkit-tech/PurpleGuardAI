@@ -102,6 +102,13 @@ python main.py review <target>
 # Remediate (two-step approval; no files are touched without --approve)
 python main.py secure <target> [--approve]
 
+# Full adversarial pipeline in one command: discover, validate,
+# propose, remediate (with --approve), and re-verify
+python main.py hack <target> [--approve]
+
+# Attack validation only (no remediation)
+python scripts/hack.py <target>
+
 # Restore a file from its PurpleGuard backup
 python main.py rollback <file>
 ```
@@ -109,6 +116,14 @@ python main.py rollback <file>
 The review queue is the day-to-day workflow: it lists what the tool
 can fix safely (with the exact approval command) and what needs a
 human, including the recommendation for each manual-review finding.
+
+`hack` runs the complete orchestrator pipeline end to end. It confirms
+attacks dynamically, proposes fixes, applies the provably safe ones
+only with `--approve`, then re-verifies through static rescan, the
+target's own test suite, and adversarial re-attack. The final verdict
+is reported honestly: findings in the manual-review queue (such as
+SSRF and deserialization) remain exploitable until fixed by hand, so
+they keep the verdict at `SECURITY_NOT_VERIFIED`.
 
 ## Adversarial E2E
 

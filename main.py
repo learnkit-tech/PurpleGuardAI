@@ -2,6 +2,7 @@ import argparse
 import json
 from datetime import datetime
 
+from hacker.orchestrator import PurpleGuardSecurityOrchestrator
 from scanner.decision.engine import SecurityDecisionEngine
 from scanner.engine import SecurityScanner
 from scanner.reporting import generate_report
@@ -304,6 +305,272 @@ def run_review(target):
         )
 
 
+def run_hack(target, approved=False):
+    """
+    Full adversarial pipeline in one command:
+
+    Discover -> Plan -> Validate -> Findings -> Propose
+        -> Approve -> Remediate -> Static Rescan -> Tests
+        -> Re-attack -> Final Verdict
+
+    Nothing is modified without --approve. Findings without a
+    provably safe automated fix are surfaced for manual review and
+    never silently rewritten.
+    """
+
+    print("\n🛡️ PurpleGuardAI Hack Pipeline")
+    print("==============================")
+    print(f"Target: {target}")
+    print("Mode: AUTHORIZED LOCAL VALIDATION")
+    print(f"Approval: {'GRANTED' if approved else 'REQUIRED'}")
+
+    orchestrator = PurpleGuardSecurityOrchestrator(target)
+
+    result = orchestrator.run(approved=approved)
+
+    recon = result.get("recon")
+
+    if recon:
+        print("\n[1] Recon")
+        print("----")
+        print("Files analyzed:", recon["files_analyzed"])
+        print("Attack surfaces:", recon["attack_surfaces"])
+        print("Attack paths:", recon["attack_paths"])
+
+    plans = result.get("plans")
+
+    if plans:
+        print("\n[2] Planned validations")
+        print("-----------------------")
+
+        for plan in plans:
+            print(
+                f"{plan['path_id']} | "
+                f"{plan['category']} | "
+                f"{plan['severity']} | "
+                f"{plan['validator']}"
+            )
+
+    validations = result.get("validation")
+
+    if validations:
+        print("\n[3] Dynamic validation")
+        print("----------------------")
+
+        for validation in validations:
+            if validation.get("validated"):
+                print(
+                    f"[CONFIRMED] {validation['path_id']} "
+                    f"{validation['category']}"
+                )
+            else:
+                print(
+                    f"[NOT CONFIRMED] "
+                    f"{validation.get('path_id')} "
+                    f"{validation.get('category')}"
+                )
+
+    confirmed = result.get("confirmed_attacks")
+
+    if confirmed is not None:
+        print(f"\nConfirmed attacks: {confirmed}")
+
+    remediation = result.get("remediation")
+
+    if remediation:
+        requires_review = remediation.get(
+            "requires_review",
+            [],
+        )
+
+        print("\n[4] Remediation proposal")
+        print("------------------------")
+        print(
+            "Auto-fixable (proposed):",
+            remediation.get("available", 0),
+        )
+        print(
+            "Requires manual review:",
+            len(requires_review),
+        )
+
+        for item in requires_review:
+            print(
+                f"  ⚠️ [{item['rule_id']}] "
+                f"{item['category']} "
+                f"{item['file']}:{item['line']}"
+            )
+            print(
+                f"     {item.get('recommendation')}"
+            )
+
+    if result.get("status") == "APPROVAL_REQUIRED":
+        print("\nStatus: APPROVAL_REQUIRED")
+        print("\n" + result.get("message", ""))
+        print(
+            "No files were modified. Re-run with "
+            "--approve to apply the proposed remediation."
+        )
+
+    elif result.get("status") in (
+        "NO_ATTACK_PATHS",
+        "NO_VALIDATIONS",
+        "NO_CONFIRMED_ATTACKS",
+    ):
+        print(f"\nStatus: {result['status']}")
+        print("\n" + result.get("message", ""))
+
+    elif result.get("status") == "REMEDIATION_FAILED":
+        print(f"\nStatus: {result['status']}")
+        print("\n" + result.get("message", ""))
+
+        remediation_result = (
+            remediation or {}
+        ).get("result", {})
+
+        for item in remediation_result.get(
+            "results",
+            [],
+        ):
+            print(
+                f"  ✗ {item.get('status')} "
+                f"{item.get('file')} "
+                f"{item.get('findings', [])}"
+            )
+
+    else:
+        remediation_result = (
+            remediation or {}
+        ).get("result", {})
+
+        print("\n[5] Remediation applied")
+        print("-----------------------")
+
+        for item in remediation_result.get(
+            "results",
+            [],
+        ):
+            if item.get("status") == "APPLIED":
+                print(
+                    f"✓ {item['file']}: "
+                    f"{', '.join(item.get('findings', []))}"
+                )
+                print(f"    backup: {item.get('backup')}")
+                print(f"    patch: {item.get('patch_file')}")
+            else:
+                print(
+                    f"✗ {item.get('status')} "
+                    f"{item.get('file')} "
+                    f"{item.get('findings', [])}"
+                )
+
+        verification = result.get("verification", {})
+
+        static_scan = verification.get(
+            "static_scan",
+            {},
+        )
+
+        remaining = static_scan.get(
+            "remaining_original_findings",
+            [],
+        )
+
+        print("\n[6] Verification")
+        print("----------------")
+        print(
+            "Static rescan:",
+            "PASS"
+            if static_scan.get("passed")
+            else f"FAIL ({len(remaining)} original finding(s) remain)",
+        )
+
+        for finding in remaining:
+            print(
+                f"    remaining: {finding.get('id')} "
+                f"{finding.get('file')}"
+            )
+
+        tests = verification.get("tests", {})
+
+        print(
+            "Tests:",
+            "PASS"
+            if tests.get("passed")
+            else "FAIL",
+        )
+
+        hacker = verification.get("hacker", {})
+
+        hacker_results = hacker.get("results", [])
+
+        blocked = [
+            item
+            for item in hacker_results
+            if item.get("blocked")
+        ]
+
+        print(
+            f"Re-attack: {len(blocked)}/"
+            f"{len(hacker_results)} attacks blocked"
+        )
+
+        for item in hacker_results:
+            if item.get("blocked"):
+                print(
+                    f"    [BLOCKED] {item.get('path_id')} "
+                    f"{item.get('category')}"
+                )
+            else:
+                print(
+                    f"    [STILL WORKS] "
+                    f"{item.get('path_id')} "
+                    f"{item.get('category')}"
+                )
+
+        verdict = verification.get("verdict", {})
+
+        print(
+            f"\nFINAL VERDICT: "
+            f"{verdict.get('status')}"
+        )
+        print(
+            f"  static scan: "
+            f"{'PASS' if verdict.get('static_scan_passed') else 'FAIL'}"
+        )
+        print(
+            f"  tests: "
+            f"{'PASS' if verdict.get('tests_passed') else 'FAIL'}"
+        )
+        print(
+            f"  hacker re-attack: "
+            f"{'PASS' if verdict.get('hacker_verification_passed') else 'FAIL'}"
+        )
+
+        if result.get("status") == "SECURITY_VERIFIED":
+            print("\n" + result.get("message", ""))
+        else:
+            print(
+                "\n⚠️ "
+                "Security is NOT fully verified. Findings that "
+                "require manual review remain exploitable until "
+                "they are fixed by hand."
+            )
+
+    report_path = "reports/orchestrator_report.json"
+
+    import os
+
+    os.makedirs("reports", exist_ok=True)
+
+    with open(report_path, "w") as file:
+        json.dump(result, file, indent=4)
+
+    print(f"\nReport saved: {report_path}")
+
+    return result
+
+
 def run_rollback(target):
     print("\n🛡️ PurpleGuardAI Rollback")
     print("=========================")
@@ -430,6 +697,33 @@ review_parser.add_argument(
 
 
 # -------------------------
+# HACK COMMAND
+# -------------------------
+
+hack_parser = subparsers.add_parser(
+    "hack",
+    help=(
+        "Run the full adversarial pipeline: discover, validate, "
+        "propose, remediate (with --approve), and re-verify"
+    )
+)
+
+hack_parser.add_argument(
+    "target",
+    help="Authorized local target directory"
+)
+
+hack_parser.add_argument(
+    "--approve",
+    action="store_true",
+    help=(
+        "Approve remediation of confirmed auto-fixable "
+        "findings"
+    )
+)
+
+
+# -------------------------
 # COMMAND DISPATCH
 # -------------------------
 
@@ -468,6 +762,13 @@ elif args.command == "review":
 
     run_review(
         args.target
+    )
+
+elif args.command == "hack":
+
+    run_hack(
+        args.target,
+        approved=args.approve
     )
 
 else:
