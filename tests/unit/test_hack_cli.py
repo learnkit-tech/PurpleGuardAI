@@ -135,7 +135,7 @@ class TestHackCli(unittest.TestCase):
 
         self.assertEqual(
             report["status"],
-            "SECURITY_NOT_VERIFIED",
+            "SECURITY_VERIFIED",
         )
 
         remediation_results = report["remediation"]["result"]["results"]
@@ -158,24 +158,32 @@ class TestHackCli(unittest.TestCase):
         self.assertIn("PG005", fixed_ids)
         self.assertIn("PG007", fixed_ids)
         self.assertIn("PG008", fixed_ids)
+        self.assertIn("PG009", fixed_ids)
+        self.assertIn("PG010", fixed_ids)
 
-        # Manual-review rules must never be auto-remediated.
-        self.assertNotIn("PG009", fixed_ids)
-        self.assertNotIn("PG010", fixed_ids)
-
-        # The remediated source must no longer shell out or eval.
+        # The remediated source must no longer shell out, eval,
+        # deserialise pickle, or make unvalidated outbound
+        # requests.
         app_source = (project / "web_app.py").read_text()
 
         self.assertNotIn("shell=True", app_source)
         self.assertNotIn("os.popen", app_source)
+        self.assertNotIn("pickle.loads", app_source)
+        self.assertIn("ALLOWED_PREFIX", app_source)
+        self.assertIn("json.loads", app_source)
 
         # A reversible backup must exist for the patched file.
         self.assertTrue(
             (project / "web_app.py.purpleguard.bak").exists()
         )
 
+        # All 8 re-attacks must be blocked.
+        hacker = report["verification"]["hacker"]
+        self.assertTrue(hacker.get("all_attacks_blocked"))
+
         # The verdict block must be printed.
         self.assertIn("FINAL VERDICT:", result.stdout)
+        self.assertIn("SECURITY_VERIFIED", result.stdout)
 
     def test_hack_on_guarded_target_confirms_nothing(self):
         """

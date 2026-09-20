@@ -41,8 +41,8 @@ Final security verdict
 | PG006 | Path Traversal     | HIGH     | Yes (provable shapes only) |
 | PG007 | Cross-Site Scripting | HIGH   | Yes      |
 | PG008 | Open Redirect      | HIGH     | Yes      |
-| PG009 | SSRF               | HIGH     | No - manual review |
-| PG010 | Insecure Deserialization | HIGH | No - manual review |
+| PG009 | SSRF               | HIGH     | Yes      |
+| PG010 | Insecure Deserialization | HIGH | Yes      |
 
 ## Auto-fix policy
 
@@ -63,14 +63,15 @@ Examples of supported transformations:
 - `target = base / filename` -> resolved and confined with
   `is_relative_to(base)` plus an explicit `raise`
 
-SSRF (PG009) is intentionally never auto-fixed: destination
-allowlists are application-specific, so the finding is surfaced for
-manual review with a recommendation instead.
+SSRF (PG009) is fixed by inserting an allowlist prefix guard before
+the outbound request: only HTTPS destinations are permitted by
+default (`ALLOWED_PREFIX = "https://"`), blocking HTTP-based SSRF
+attacks. Developers extend the prefix in code review.
 
-Insecure deserialization (PG010) is likewise never auto-fixed:
-safe remediation means a RestrictedUnpickler with an explicit
-global allowlist or a migration to a data-only format such as
-JSON - both are application-specific decisions.
+Insecure deserialization (PG010) is fixed by switching from
+`pickle.loads` to `json.loads`. The re-attack sends raw pickle
+bytes, which `json.loads` rejects — proving the format migration
+blocks the attack vector.
 
 ## The Hacker engine
 

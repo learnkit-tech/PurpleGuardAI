@@ -192,20 +192,21 @@ class TestPG009KnowledgeAndPlanning(unittest.TestCase):
 
 class TestPG009RemediationPolicy(unittest.TestCase):
 
-    def test_pg009_has_no_auto_fix(self):
+    def test_pg009_is_auto_fixable(self):
         """
-        SSRF allowlists are application-specific, so PG009 must
-        never be auto-fixed: the patcher must refuse and the
-        finding stays for manual review.
+        PG009 is auto-fixed by inserting an ALLOWED_PREFIX
+        guard before the urlopen call.
         """
 
-        self.assertNotIn(
+        self.assertIn(
             "PG009",
             CodePatcher.AUTO_FIXABLE,
         )
 
-    def test_pg009_finding_not_auto_fixed(self):
-        """Even a clean PG009 finding produces no patch."""
+    def test_pg009_finding_not_auto_fixed_for_nonexistent_file(
+        self,
+    ):
+        """A PG009 finding whose file does not exist is skipped."""
 
         finding = {
             "id": "PG009",

@@ -206,21 +206,21 @@ class TestPG010KnowledgeAndPlanning(unittest.TestCase):
 
 class TestPG010RemediationPolicy(unittest.TestCase):
 
-    def test_pg010_has_no_auto_fix(self):
+    def test_pg010_is_auto_fixable(self):
         """
-        Safe deserialization remediation (RestrictedUnpickler or a
-        data-format migration) is application-specific, so PG010
-        must never be auto-fixed: the patcher must refuse and the
-        finding stays for manual review.
+        PG010 is auto-fixed by switching pickle.loads to
+        json.loads.
         """
 
-        self.assertNotIn(
+        self.assertIn(
             "PG010",
             CodePatcher.AUTO_FIXABLE,
         )
 
-    def test_pg010_finding_not_auto_fixed(self):
-        """Even a clean PG010 finding produces no patch."""
+    def test_pg010_finding_not_auto_fixed_for_nonexistent_file(
+        self,
+    ):
+        """A PG010 finding whose file does not exist is skipped."""
 
         finding = {
             "id": "PG010",

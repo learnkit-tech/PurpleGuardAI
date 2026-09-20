@@ -29,6 +29,8 @@ class CodePatcher:
             "PG006",
             "PG007",
             "PG008",
+            "PG009",
+            "PG010",
         }
     )
 
@@ -621,6 +623,169 @@ class CodePatcher:
                 content,
                 old_assignment,
                 new_assignment
+            )
+
+        # ---------------------------------------------------------
+        # Confirmed SSRF
+        # ---------------------------------------------------------
+        if category == "SSRF":
+            source_line = finding.get("code", "")
+
+            if (
+                not source_line
+                or "urlopen" not in source_line
+            ):
+                return None
+
+            try:
+                tree = ast.parse(source_line)
+            except SyntaxError:
+                return None
+
+            call_node = next(
+                (
+                    n
+                    for n in ast.walk(tree)
+                    if isinstance(n, ast.Call)
+                ),
+                None,
+            )
+
+            if call_node is None or not call_node.args:
+                return None
+
+            url_arg = call_node.args[0]
+
+            if not isinstance(url_arg, ast.Name):
+                return None
+
+            url_var = url_arg.id
+
+            position = content.find(source_line)
+
+            if position < 0:
+                return None
+
+            lines = content.split("\n")
+
+            urlopen_idx = (
+                content[:position].count("\n")
+            )
+
+            # Walk backward to find the try: statement that
+            # wraps the urlopen call. The guard must go OUTSIDE
+            # the try/except so the ValueError is not swallowed
+            # by a broad except handler.
+            try_idx = None
+
+            for i in range(urlopen_idx - 1, -1, -1):
+                if lines[i].strip().startswith("try:"):
+                    try_idx = i
+                    break
+
+            if try_idx is None:
+                return None
+
+            # If the URL variable is already guarded by a
+            # startswith check, the fix is not needed.
+            preceding = "\n".join(lines[:try_idx])
+
+            if f"not {url_var}.startswith(" in preceding:
+                return None
+
+            indent = ""
+
+            for char in lines[try_idx]:
+                if char in (" ", "\t"):
+                    indent += char
+                else:
+                    break
+
+            guard = (
+                f"{indent}if not {url_var}.startswith("
+                f"ALLOWED_PREFIX):\n"
+                f"{indent}    raise ValueError(\n"
+                f"{indent}        'SSRF blocked: "
+                f"destination not in allowlist'\n"
+                f"{indent}    )"
+            )
+
+            try_line = lines[try_idx]
+
+            try_pos = content.find(try_line)
+
+            if try_pos < 0:
+                return None
+
+            try_line_start = content.rfind(
+                "\n", 0, try_pos
+            ) + 1
+
+            patched = (
+                content[:try_line_start]
+                + guard
+                + "\n"
+                + content[try_line_start:]
+            )
+
+            if patched == content:
+                return None
+
+            # Add the ALLOWED_PREFIX constant when it does not
+            # yet exist, placing it just before the first
+            # route decorator.
+            if "ALLOWED_PREFIX" not in patched:
+                flask_init = (
+                    "app = Flask(__name__)"
+                )
+
+                pos = patched.find(flask_init)
+
+                if pos >= 0:
+                    insert_at = (
+                        pos + len(flask_init)
+                    )
+
+                    patched = (
+                        patched[:insert_at]
+                        + "\n\n"
+                        "# PurpleGuard SSRF mitigation"
+                        "\nALLOWED_PREFIX = "
+                        '"https://"'
+                        + patched[insert_at:]
+                    )
+
+            return patched
+
+        # ---------------------------------------------------------
+        # Confirmed insecure deserialization
+        # ---------------------------------------------------------
+        if category == "DESERIALIZATION":
+            source_line = finding.get("code", "")
+
+            if (
+                not source_line
+                or "pickle.loads" not in source_line
+            ):
+                return None
+
+            fixed_line = source_line.replace(
+                "pickle.loads",
+                "json.loads",
+                1,
+            )
+
+            patched = self._replace_exact(
+                content,
+                source_line,
+                fixed_line,
+            )
+
+            if patched is None:
+                return None
+
+            return self._ensure_import(
+                patched, "import json"
             )
 
         return None

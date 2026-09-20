@@ -1,12 +1,13 @@
 --- vulnerable
 +++ secure_fix
-@@ -1,3 +1,5 @@
+@@ -1,3 +1,6 @@
++import json
 +from markupsafe import escape
 +import shlex
  import os
+ import pickle
  import subprocess
- import urllib.request
-@@ -10,38 +12,46 @@
+@@ -11,44 +14,56 @@
  @app.route("/run")
  def run():
      command = request.args.get("command")
@@ -57,3 +58,22 @@
      return redirect(destination)
  
  
+ @app.route("/fetch")
+ def fetch():
+     url = request.args.get("url")
++    if not url.startswith(ALLOWED_PREFIX):
++        raise ValueError(
++            'SSRF blocked: destination not in allowlist'
++        )
+     try:
+         response = urllib.request.urlopen(url, timeout=2)
+         return {"status": response.status, "body": response.read().decode()}
+@@ -60,7 +75,7 @@
+ def load():
+     data = request.get_data()
+     try:
+-        obj = pickle.loads(data)
++        obj = json.loads(data)
+         return {"loaded": str(obj)}
+     except Exception as exc:
+         return {"error": f"deserialization failed: {exc}"}

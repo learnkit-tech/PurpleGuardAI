@@ -474,7 +474,7 @@ class TestPG005PG007PG008Unchanged(unittest.TestCase):
         )
 
     def test_auto_fixable_set_is_unchanged(self):
-        """PG006 joins the set; no existing member is removed."""
+        """PG006-010 join the set; no existing member is removed."""
 
         self.assertEqual(
             CodePatcher.AUTO_FIXABLE,
@@ -482,6 +482,7 @@ class TestPG005PG007PG008Unchanged(unittest.TestCase):
                 {
                     "PG001", "PG002", "PG003", "PG004",
                     "PG005", "PG006", "PG007", "PG008",
+                    "PG009", "PG010",
                 }
             ),
         )
