@@ -210,7 +210,7 @@ export default function Home() {
     useState<Finding | null>(null);
 
   const [target, setTarget] = useState(
-    "/data/data/com.termux/files/home/PurpleGuardAI/tests/hacker_target"
+    "tests/hacker_target_web"
   );
 
   const [findings, setFindings] = useState<Finding[]>([]);
