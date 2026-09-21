@@ -58,13 +58,14 @@ tailwind.config={{
 
 <nav class="bg-gray-900 border-b border-gray-800 px-6 py-3">
   <div class="max-w-7xl mx-auto flex items-center justify-between">
-    <a href="/" class="flex items-center gap-2 text-brand-400 font-bold text-lg tracking-tight">
-      <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+    <a href="/" class="flex items-center gap-2 text-brand-400 font-bold text-base sm:text-lg tracking-tight">
+      <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
       </svg>
-      PurpleGuardAI
+      <span class="hidden sm:inline">PurpleGuard</span>
+      <span class="sm:hidden">PG</span>
     </a>
-    <div class="flex items-center gap-6 text-sm text-gray-400">
+    <div class="flex items-center gap-4 sm:gap-6 text-sm text-gray-400">
       <a href="/" class="hover:text-white transition">Dashboard</a>
       <a href="/reports" class="hover:text-white transition">Reports</a>
       <a href="/pipeline" class="hover:text-white transition">Pipeline</a>
@@ -72,7 +73,7 @@ tailwind.config={{
   </div>
 </nav>
 
-<main class="max-w-7xl mx-auto px-6 py-8">
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
 """
 
 TAIL = """\
@@ -237,21 +238,23 @@ def index():
     if findings_rows:
         findings_block = (
             '<div class="bg-gray-900 rounded-xl border '
-            'border-gray-800 overflow-hidden mb-8">'
+            'border-gray-800 mb-8">'
             '<div class="p-5 border-b border-gray-800">'
             '<h2 class="text-lg font-semibold text-white">'
             'Static Analysis Findings</h2></div>'
-            '<table class="w-full text-sm"><thead><tr '
+            '<div class="overflow-x-auto">'
+            '<table class="w-full text-sm">'
+            '<thead><tr '
             'class="text-xs text-gray-500 uppercase '
             'tracking-wider border-b border-gray-800">'
-            '<th class="px-5 py-3 text-left">Rule</th>'
-            '<th class="px-5 py-3 text-left">Name</th>'
-            '<th class="px-5 py-3 text-left">File</th>'
-            '<th class="px-5 py-3 text-left">Line</th>'
-            '<th class="px-5 py-3 text-left">Severity</th>'
-            '<th class="px-5 py-3 text-left">Auto-fix</th>'
+            '<th class="px-4 py-3 text-left">Rule</th>'
+            '<th class="px-4 py-3 text-left">Name</th>'
+            '<th class="px-4 py-3 text-left">File</th>'
+            '<th class="px-4 py-3 text-left">Line</th>'
+            '<th class="px-4 py-3 text-left">Severity</th>'
+            '<th class="px-4 py-3 text-left">Auto-fix</th>'
             '</tr></thead><tbody>'
-            + findings_rows + '</tbody></table></div>'
+            + findings_rows + '</tbody></table></div></div>'
         )
 
     body = f"""
