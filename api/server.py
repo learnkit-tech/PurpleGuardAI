@@ -63,6 +63,38 @@ def status():
 
 
 # ---------------------------------------------------------
+# Reset test fixture to vulnerable state
+# ---------------------------------------------------------
+
+@app.route("/reset", methods=["POST"])
+def reset_fixture():
+    """Reset the web test fixture to its vulnerable state.
+
+    This exists so the demo can show real vulnerabilities.
+    The fixture ships in a guarded state for tests; this
+    endpoint restores the vulnerable patterns.
+    """
+    import subprocess
+    fixture_dir = os.path.join(
+        os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)
+        )),
+        "tests", "hacker_target_web"
+    )
+    reset_script = os.path.join(fixture_dir, "reset_vulnerable.py")
+    if not os.path.exists(reset_script):
+        return jsonify({"error": "reset script not found"}), 404
+    result = subprocess.run(
+        [sys.executable, reset_script],
+        capture_output=True, text=True, timeout=10
+    )
+    return jsonify({
+        "status": "ok",
+        "message": result.stdout.strip() or "Fixture reset"
+    })
+
+
+# ---------------------------------------------------------
 # Static security scanner
 # ---------------------------------------------------------
 

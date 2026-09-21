@@ -314,6 +314,30 @@ export default function Home() {
     }
   }
 
+  const [resetting, setResetting] = useState(false);
+
+  async function resetFixture() {
+    setResetting(true);
+    try {
+      const res = await fetch(`${API_URL}/reset`, { method: "POST" });
+      const data = await res.json();
+      if (data.status === "ok") {
+        setSecureResult(null);
+        setFindings([]);
+        setConnected(false);
+        setActive("Overview");
+        setScanError("");
+        setSecureError("");
+        setSelectedAttackPath(null);
+        setSelectedFinding(null);
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setResetting(false);
+    }
+  }
+
   const criticalCount = useMemo(
     () =>
       findings.filter(
@@ -495,13 +519,23 @@ export default function Home() {
                 placeholder="/path/to/project"
               />
 
-              <button
-                onClick={() => runPurpleGuard(false)}
-                disabled={securing}
-                className="rounded-xl bg-purple-500 px-5 py-3 text-sm font-semibold disabled:opacity-60"
-              >
-                {securing ? "Analyzing..." : "Analyze with PurpleGuard"}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => runPurpleGuard(false)}
+                  disabled={securing}
+                  className="rounded-xl bg-purple-500 px-5 py-3 text-sm font-semibold disabled:opacity-60"
+                >
+                  {securing ? "Analyzing..." : "Analyze with PurpleGuard"}
+                </button>
+
+                <button
+                  onClick={resetFixture}
+                  disabled={resetting}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-medium text-white/50 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+                >
+                  {resetting ? "Resetting..." : "Reset Fixture"}
+                </button>
+              </div>
             </div>
 
             {scanError && (
