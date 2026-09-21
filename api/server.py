@@ -12,9 +12,20 @@ sys.path.append(
 
 from flask import Flask, jsonify, request
 from scanner.engine import SecurityScanner
-from dev_agent.run_agent import main
-from dev_agent.status import get_status, update_status
 from hacker.orchestrator import PurpleGuardSecurityOrchestrator
+
+# dev_agent is optional — only needed for /agent/* endpoints
+dev_agent_main = None
+dev_agent_get_status = None
+dev_agent_update_status = None
+try:
+    from dev_agent.run_agent import main as _dev_main
+    from dev_agent.status import get_status as _dev_get, update_status as _dev_update
+    dev_agent_main = _dev_main
+    dev_agent_get_status = _dev_get
+    dev_agent_update_status = _dev_update
+except Exception:
+    pass
 
 
 app = Flask(__name__)
@@ -160,31 +171,36 @@ def secure():
 @app.route("/agent/status")
 def agent_status():
 
+    if dev_agent_get_status is None:
+        return jsonify({"error": "dev_agent not available"}), 503
     return jsonify(
-        get_status()
+        dev_agent_get_status()
     )
 
 
 @app.route("/agent/run", methods=["POST"])
 def agent_run():
 
+    if dev_agent_main is None:
+        return jsonify({"error": "dev_agent not available"}), 503
+
     def run_agent():
 
-        update_status({
+        dev_agent_update_status({
             "status": "running"
         })
 
         try:
 
-            main()
+            dev_agent_main()
 
-            update_status({
+            dev_agent_update_status({
                 "status": "completed"
             })
 
         except Exception as error:
 
-            update_status({
+            dev_agent_update_status({
                 "status": "error",
                 "message": str(error)
             })

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 const API_URL =
-  process.env.NEXT_PUBLIC_PURPLEGUARD_API || "http://127.0.0.1:8000";
+  process.env.NEXT_PUBLIC_PURPLEGUARD_API || "";
 
 type Finding = {
   id: string;
