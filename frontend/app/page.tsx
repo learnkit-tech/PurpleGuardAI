@@ -222,6 +222,10 @@ export default function Home() {
     useState<string | null>(null);
 
   async function runScan() {
+    if (scanning || securing) {
+      return;
+    }
+
     if (!target.trim()) {
       setScanError("Enter a project path first.");
       return;
@@ -258,12 +262,22 @@ export default function Home() {
           ? error.message
           : "Unable to connect to PurpleGuard API."
       );
+
+      // A failed scan must not leave stale successful results on screen.
+      setFindings([]);
+      setSecureResult(null);
+      setLastScanTarget("");
+      setConnected(false);
     } finally {
       setScanning(false);
     }
   }
 
   async function runPurpleGuard(approved = false) {
+    if (securing || scanning) {
+      return;
+    }
+
     if (!target.trim()) {
       setSecureError("Enter a project path first.");
       return;
@@ -309,6 +323,9 @@ export default function Home() {
           ? error.message
           : "Unable to connect to PurpleGuard."
       );
+
+      // A failed operation must not leave a stale verdict on screen.
+      setSecureResult(null);
     } finally {
       setSecuring(false);
     }
@@ -317,6 +334,10 @@ export default function Home() {
   const [resetting, setResetting] = useState(false);
 
   async function resetFixture() {
+    if (resetting) {
+      return;
+    }
+
     setResetting(true);
     try {
       const res = await fetch(`${API_URL}/reset`, { method: "POST" });
@@ -325,6 +346,7 @@ export default function Home() {
         setSecureResult(null);
         setFindings([]);
         setConnected(false);
+        setLastScanTarget("");
         setActive("Overview");
         setScanError("");
         setSecureError("");
@@ -385,9 +407,6 @@ export default function Home() {
           : mediumCount > 0
             ? "Moderate risk"
             : "Low risk";
-
-  const finalVerdict =
-    secureResult?.verification?.verdict?.status;
 
   return (
     <main className="min-h-screen bg-[#08070c] text-white">
@@ -553,6 +572,73 @@ export default function Home() {
             {lastScanTarget && !secureError && (
               <div className="mt-4 text-xs text-emerald-300">
                 ● Target connected · {lastScanTarget}
+              </div>
+            )}
+
+            {lastScanTarget &&
+              !scanError &&
+              !secureError &&
+              findings.length === 0 &&
+              !securing &&
+              !scanning && (
+                <div className="mt-3 rounded-xl border border-sky-400/20 bg-sky-400/5 px-4 py-3 text-xs leading-5 text-sky-200/90">
+                  Target analyzed — the engine found no vulnerable
+                  patterns in the current source.
+                  {lastScanTarget.includes("hacker_target") && (
+                    <>
+                      {" "}
+                      The bundled demo fixture is currently in a
+                      <strong> safe state (guarded or already
+                      remediated)</strong>. Press
+                      <strong> Reset Fixture</strong> to load the
+                      vulnerable demo target, then run the analysis
+                      again to see confirmed findings.
+                    </>
+                  )}
+                </div>
+              )}
+
+            {secureResult?.verification && (
+              <div
+                className={`mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border px-4 py-3 text-xs ${
+                  secureResult.verification.verdict?.status ===
+                  "SECURITY_VERIFIED"
+                    ? "border-emerald-400/20 bg-emerald-400/5 text-emerald-200"
+                    : "border-amber-400/20 bg-amber-400/5 text-amber-200"
+                }`}
+              >
+                <span className="font-semibold">
+                  {secureResult.verification.verdict?.status ||
+                    "NO VERDICT RETURNED"}
+                </span>
+
+                <span>
+                  Rescan:{" "}
+                  {secureResult.verification.static_scan
+                    ?.remaining_count ?? "unknown"}{" "}
+                  findings remaining
+                </span>
+
+                <span>
+                  Re-attack:{" "}
+                  {
+                    (
+                      secureResult.verification.hacker?.results || []
+                    ).filter((item) => item.blocked === true).length
+                  }
+                  /
+                  {(
+                    secureResult.verification.hacker?.results || []
+                  ).length}{" "}
+                  blocked
+                </span>
+
+                <span>
+                  Tests:{" "}
+                  {secureResult.verification.tests?.passed === true
+                    ? "PASSED"
+                    : "FAILED"}
+                </span>
               </div>
             )}
           </div>
@@ -733,7 +819,13 @@ export default function Home() {
                       <div className="text-sm text-white/40">
                         {(secureResult.plans || []).length} discovered
                         {" · "}
-                        {secureResult.confirmed_attacks ?? 0} confirmed
+                        {secureResult.confirmed_attacks ?? 0} validated
+                        {" · "}
+                        {
+                          (secureResult.verification?.hacker?.results || [])
+                            .filter((item) => item.blocked === true).length
+                        }{" "}
+                        blocked
                       </div>
                     </div>
 
@@ -745,11 +837,18 @@ export default function Home() {
                           (item) => item.path_id === plan.path_id
                         );
 
+                        const retest = (
+                          secureResult.verification?.hacker?.results || []
+                        ).find(
+                          (item) => item.path_id === plan.path_id
+                        );
+
                         return (
                           <AttackPathCard
                             key={plan.path_id}
                             plan={plan}
                             validation={validation}
+                            retest={retest}
                             remediation={(
                               secureResult.remediation?.previews || []
                             ).find(
@@ -1304,6 +1403,7 @@ export default function Home() {
 function AttackPathCard({
   plan,
   validation,
+  retest,
   remediation,
   onApprove,
   securing,
@@ -1312,6 +1412,11 @@ function AttackPathCard({
 }: {
   plan: NonNullable<SecureResult["plans"]>[number];
   validation?: NonNullable<SecureResult["validation"]>[number];
+  retest?: NonNullable<
+    NonNullable<
+      NonNullable<SecureResult["verification"]>["hacker"]
+    >["results"]
+  >[number];
   remediation?: NonNullable<
     NonNullable<SecureResult["remediation"]>["previews"]
   >[number];
@@ -1321,6 +1426,23 @@ function AttackPathCard({
   onSelect: () => void;
 }) {
   const confirmed = validation?.validated === true;
+
+  // Lifecycle state comes strictly from backend evidence:
+  // DISCOVERED = path found, no validation yet
+  // VALIDATED  = behavioural validation confirmed the exploit
+  // UNRESOLVED = re-attack after remediation still succeeds
+  // BLOCKED    = re-attack after remediation was blocked
+  const retested =
+    retest !== undefined && retest.blocked !== undefined;
+  const blocked = retest?.blocked === true;
+  const pathStatus = blocked
+    ? "BLOCKED"
+    : retested
+      ? "UNRESOLVED"
+      : confirmed
+        ? "VALIDATED"
+        : "DISCOVERED";
+
   const category = plan.category.replaceAll("_", " ");
 
   const isSql = plan.category === "SQL_INJECTION";
@@ -1382,14 +1504,22 @@ function AttackPathCard({
 
           <div
             className={`rounded-full px-3 py-1.5 text-[9px] font-semibold ${
-              confirmed
-                ? "bg-red-400/10 text-red-300"
-                : "bg-white/5 text-white/40"
+              blocked
+                ? "bg-emerald-400/10 text-emerald-300"
+                : pathStatus === "UNRESOLVED"
+                  ? "bg-amber-400/10 text-amber-300"
+                  : confirmed
+                    ? "bg-red-400/10 text-red-300"
+                    : "bg-white/5 text-white/40"
             }`}
           >
-            {confirmed
-              ? "ATTACK CONFIRMED"
-              : "NOT CONFIRMED"}
+            {blocked
+              ? "✓ BLOCKED"
+              : pathStatus === "UNRESOLVED"
+                ? "⚠ UNRESOLVED"
+                : confirmed
+                  ? "VALIDATED"
+                  : "DISCOVERED"}
           </div>
         </div>
 
@@ -1439,14 +1569,18 @@ function AttackPathCard({
 
               <div
                 className={`mt-1 text-xs font-semibold ${
-                  confirmed
-                    ? "text-red-300"
-                    : "text-white/45"
+                  blocked
+                    ? "text-emerald-300"
+                    : confirmed
+                      ? "text-red-300"
+                      : "text-white/45"
                 }`}
               >
-                {confirmed
-                  ? "EXPLOIT CONFIRMED"
-                  : "Awaiting validation"}
+                {blocked
+                  ? "EXPLOIT BLOCKED"
+                  : confirmed
+                    ? "EXPLOIT CONFIRMED"
+                    : "Awaiting validation"}
               </div>
             </div>
           </div>
@@ -1897,6 +2031,10 @@ function FindingsPanel({
                       }`}
                     >
                       {confirmed ? "CONFIRMED" : "DETECTED"}
+                    </span>
+
+                    <span className="font-mono text-[10px] text-purple-300/70">
+                      {finding.id}
                     </span>
 
                     <span className="text-[10px] text-white/25">
