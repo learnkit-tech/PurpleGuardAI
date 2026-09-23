@@ -43,6 +43,21 @@ def route_task(task):
         }
 
 
+    if "security" in task or "secure" in task:
+        return {
+            "area": "security",
+            "files": [
+                "scanner/",
+                "hacker/",
+                "purpleguard_runner.py"
+            ],
+            "goal": (
+                "Run the PurpleGuard security pipeline "
+                "through the ECC bridge."
+            )
+        }
+
+
     return {
         "area": "general",
         "files": [],

@@ -14,16 +14,22 @@ from flask import Flask, jsonify, request
 from scanner.engine import SecurityScanner
 from hacker.orchestrator import PurpleGuardSecurityOrchestrator
 
-# dev_agent is optional — only needed for /agent/* endpoints
+# dev_agent is optional — only needed for /agent/* endpoints.
+# The two imports are split so a missing optional dependency in the
+# full agent loop (e.g. `requests` via agent_api.llm_provider) does
+# not take down the lightweight status endpoint with it.
 dev_agent_main = None
 dev_agent_get_status = None
 dev_agent_update_status = None
 try:
-    from dev_agent.run_agent import main as _dev_main
     from dev_agent.status import get_status as _dev_get, update_status as _dev_update
-    dev_agent_main = _dev_main
     dev_agent_get_status = _dev_get
     dev_agent_update_status = _dev_update
+except Exception:
+    pass
+try:
+    from dev_agent.run_agent import main as _dev_main
+    dev_agent_main = _dev_main
 except Exception:
     pass
 
