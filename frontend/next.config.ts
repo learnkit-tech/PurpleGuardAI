@@ -5,6 +5,12 @@ const nextConfig: NextConfig = {
     "127.0.0.1",
     "localhost",
     "10.162.93.201",
+    // Freebuff preview tunnel (the origin the phone actually opens).
+    // Without this, Next dev answers 403 to crossorigin chunk requests
+    // from the tunnel, the page component never loads, and every
+    // button/nav control is dead in the browser.
+    "3000-itfjd1alfkz2kpnvwezw0.e2b.app",
+    "*.e2b.app",
   ],
   async rewrites() {
     return [
