@@ -27,3 +27,7 @@ node_modules/
 
 # Convex generated files
 src/convex/_generated/
+scripts/engine/.env
+scripts/engine/.purpleguard-findings.json
+__pycache__/
+*.pyc
