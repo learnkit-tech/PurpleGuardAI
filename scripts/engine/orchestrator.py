@@ -1,32 +1,22 @@
 #!/usr/bin/env python3
-"""PurpleGuard engine loop (Python) — contract per docs/ENGINE_API.md.
+"""PurpleGuard engine loop v2 — kind-routing runs loop + real approvals.
 
-This is the ENGINE side of the runs loop. It is intentionally honest:
-it performs NO scanning and fabricates NO findings. Where a real validator
-must act, it prints exactly what the run/approval/revalidation requires.
-Replace the marked `# === REAL ENGINE WORK ===` sections with orchestrator.py
-validation logic; the transport, auth, claim/resolve plumbing, and verdict
-write-backs below are production-ready as-is.
+Contract per docs/ENGINE_API.md. Honesty rules unchanged:
+  - verdicts come only from the real engine's validators/re-verification
+  - no target / no clone / no context => work stays pending or fails honestly
+  - a dry run never fetches and never validates (resolves ok:false)
 
-Contract summary:
-    GET  /api/runs/pending        queued runs (oldest first)
-    POST /api/runs/claim          atomic claim; response carries the run SCOPE
-    POST /api/ingest_finding      push one finding (requires id + attackSteps)
-    POST /api/runs/resolve        run outcome + findingsIngested count
-    GET  /api/approvals/pending   developer-approved buffers (ai | manual)
-    POST /api/approvals/resolve   verdict: VERIFIED_FIXED | STILL_VULNERABLE
-    GET  /api/revalidate/pending  queued fresh re-attacks
-    POST /api/revalidate/resolve  verdict write-back
+Run kinds routed on claim:
+  scan         -> SecurityScanner static scan only (no live target)
+  validation   -> discover -> plan -> validate on LocalTarget -> ingest
+  remediation  -> full secure loop (engine's own APPROVAL_REQUIRED gate)
 
-Usage:
-    export SITE="https://expert-elk-927.convex.site"
-    export ENGINE_API_KEY="<value of ENGINE_API_KEY env var on the deployment>"
-    export GITHUB_TOKEN="ghp_..."          # optional: enables repo fetch
-    python3 orchestrator.py --once         # single poll pass
-    python3 orchestrator.py                # loop every POLL_INTERVAL_SECONDS
-
-Every request must carry X-Engine-Key. SITE must be the *.convex.site origin,
-NOT *.convex.cloud (the .cloud host serves queries/mutations, not /api/*).
+Approvals/revalidations need the finding's context (file, category,
+validator). The engine caches every finding it ingests in
+scripts/engine/.purpleguard-findings.json, and applies approved buffers to
+LOCAL_CLONE_PATH (a checkout of the vulnerable target, e.g.
+~/PurpleGuardAI/tests/hacker_target_web). Without a clone, work stays
+pending — the UI shows WAITING FOR ENGINE, which is true.
 """
 
 from __future__ import annotations
@@ -34,24 +24,38 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 import time
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
 
-# Real validators live alongside this file (scripts/engine/validators.py).
-from validators import validate  # noqa: E402
+from validators import validate as static_validate  # noqa: E402
+from engine_adapter import (  # noqa: E402
+    _map_static_finding,
+    materialize_target,
+    run_discovery_and_validation,
+    run_full_secure_loop,
+)
+
+# Category -> validator method on LocalAttackValidator (the real planner map).
+from hacker.planner import AttackPlanner              # noqa: E402
+from hacker.validation.local_target import LocalTarget  # noqa: E402
+from hacker.validation.validator import LocalAttackValidator  # noqa: E402
+from scanner.engine import SecurityScanner            # noqa: E402
+
+VALIDATOR_BY_CATEGORY = dict(AttackPlanner.VALIDATORS)
 
 SITE = os.environ.get("SITE", "").rstrip("/")
 KEY = os.environ.get("ENGINE_API_KEY", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+LOCAL_CLONE_PATH = os.environ.get("LOCAL_CLONE_PATH", "")
 POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "15"))
+CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".purpleguard-findings.json")
 
 
 def _require_env() -> None:
-    """Validated at call time (not import time) so the module can be
-    imported by tests and tooling without deployment credentials."""
     if not SITE or not KEY:
         print(
             "Usage: SITE=https://<deployment>.convex.site ENGINE_API_KEY=<key> "
@@ -72,10 +76,7 @@ def api(path: str, method: str = "GET", body: Optional[Dict[str, Any]] = None) -
         f"{SITE}{path}",
         data=data,
         method=method,
-        headers={
-            "Content-Type": "application/json",
-            "X-Engine-Key": KEY,
-        },
+        headers={"Content-Type": "application/json", "X-Engine-Key": KEY},
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as res:
@@ -86,33 +87,51 @@ def api(path: str, method: str = "GET", body: Optional[Dict[str, Any]] = None) -
 
 
 # ---------------------------------------------------------------------------
-# Finding push (docs/ENGINE_API.md section 1)
+# Local finding cache (engine's own ingested findings -> context for approvals)
 # ---------------------------------------------------------------------------
+
+def cache_load() -> Dict[str, Any]:
+    try:
+        with open(CACHE_PATH, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def cache_save(payload: Dict[str, Any]) -> None:
+    cache = cache_load()
+    cache[payload.get("id", "")] = payload
+    try:
+        with open(CACHE_PATH, "w", encoding="utf-8") as fh:
+            json.dump(cache, fh)
+    except OSError as e:
+        log(f"cache write failed (ignored): {e}")
+
 
 def ingest_finding(payload: Dict[str, Any]) -> Any:
     if "id" not in payload or not payload.get("attackSteps"):
         raise ValueError(
             "finding payload needs 'id' and non-empty 'attackSteps' — "
-            "verdicts must come from reverification.py, never be invented"
+            "verdicts must come from real validation, never be invented"
         )
-    return api("/api/ingest_finding", method="POST", body=payload)
+    result = api("/api/ingest_finding", method="POST", body=payload)
+    cache_save(payload)
+    return result
 
 
-# ---------------------------------------------------------------------------
-# Repo fetch helper (optional convenience; requires GITHUB_TOKEN for private)
-# ---------------------------------------------------------------------------
+def heartbeat(run_id: str, stage: str) -> None:
+    try:
+        api("/api/runs/heartbeat", method="POST", body={"runId": run_id, "stage": stage})
+    except Exception as e:  # noqa: BLE001
+        log(f"heartbeat failed (ignored): {e}")
+
 
 def fetch_repo_files(repo: str) -> List[Dict[str, Any]]:
-    """List {path, content} entries for the repo's default branch.
-    Public repos fetch anonymously; private repos need GITHUB_TOKEN.
-    Returns [] when a token is required but unset (honest: no work done)."""
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
+    """List {path, content} for the repo's default branch. [] when a token
+    is required but unset (honest: no work done)."""
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
     if GITHUB_TOKEN:
         headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
-
     files: List[Dict[str, Any]] = []
 
     def gh(url: str) -> Any:
@@ -124,17 +143,13 @@ def fetch_repo_files(repo: str) -> List[Dict[str, Any]]:
         tree = gh(tree_url)
         for item in tree.get("tree", []):
             if item["type"] == "blob":
-                if item["size"] > 200_000:  # skip large blobs
+                if item["size"] > 200_000:
                     continue
                 blob = gh(item["url"])
                 import base64
-                content = base64.b64decode(blob.get("content", "")).decode(
-                    "utf-8", errors="replace"
-                )
+                content = base64.b64decode(blob.get("content", "")).decode("utf-8", errors="replace")
                 files.append({"path": prefix + item["path"], "content": content})
-            elif item["type"] == "tree" and item["path"] not in (
-                ".git", "node_modules", "dist", "build",
-            ):
+            elif item["type"] == "tree" and item["path"] not in (".git", "node_modules", "dist", "build"):
                 walk(item["url"], prefix + item["path"] + "/")
 
     repo_meta = gh(f"https://api.github.com/repos/{repo}")
@@ -143,8 +158,24 @@ def fetch_repo_files(repo: str) -> List[Dict[str, Any]]:
     return files
 
 
+def load_files_from_dir(root: str) -> List[Dict[str, Any]]:
+    files: List[Dict[str, Any]] = []
+    for base, dirs, names in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in (".git", "node_modules", "__pycache__", "venv", ".venv")]
+        for name in names:
+            full = os.path.join(base, name)
+            try:
+                if os.path.getsize(full) > 200_000:
+                    continue
+                with open(full, "r", encoding="utf-8", errors="replace") as fh:
+                    files.append({"path": os.path.relpath(full, root), "content": fh.read()})
+            except OSError:
+                continue
+    return files
+
+
 # ---------------------------------------------------------------------------
-# The loop
+# Run handling, routed by kind
 # ---------------------------------------------------------------------------
 
 def claim_run(run: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -162,88 +193,147 @@ def claim_run(run: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return claim
 
 
+def _resolve(run_id: str, ok: bool, note: str, pushed: int) -> None:
+    api("/api/runs/resolve", method="POST", body={
+        "runId": run_id, "ok": ok, "note": note, "findingsIngested": pushed,
+    })
+
+
+def handle_scan(run_id: str, project: str, scope: Dict[str, Any]) -> None:
+    """Static scan only: materialize in-scope files, run SecurityScanner,
+    push clearly-labeled static findings. No live target is started."""
+    heartbeat(run_id, "static scan: fetching authorized target")
+    try:
+        files = fetch_repo_files(project)
+    except Exception as e:  # noqa: BLE001
+        _resolve(run_id, False, f"target fetch failed: {e}", 0)
+        return
+    root = materialize_target(project, files, scope)
+    if root is None:
+        _resolve(run_id, False, "no files in run scope (fail-closed) — nothing scanned", 0)
+        return
+    try:
+        heartbeat(run_id, "static scan: running SecurityScanner (PG rules)")
+        pushed = 0
+        for f in SecurityScanner(root).scan():
+            payload = _map_static_finding(project, root, f)
+            if not payload:
+                continue
+            heartbeat(run_id, f"static scan: ingesting {payload['id']}")
+            try:
+                ingest_finding(payload)
+                pushed += 1
+            except (RuntimeError, ValueError) as e:
+                log(f"ingest failed for {payload['id']}: {e}")
+        _resolve(run_id, True, f"static scan complete: {pushed} finding(s) pushed", pushed)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def handle_validation(run_id: str, project: str, scope: Dict[str, Any], dry_run: bool) -> None:
+    if dry_run:
+        _resolve(run_id, False, "python orchestrator dry run — wiring verified, no validation executed", 0)
+        log(f"resolved run {run_id} as ok:false (dry run)")
+        return
+    heartbeat(run_id, "validation: fetching authorized target")
+    try:
+        files = fetch_repo_files(project)
+    except Exception as e:  # noqa: BLE001
+        _resolve(run_id, False, f"target fetch failed: {e}", 0)
+        return
+    if not files:
+        _resolve(run_id, False, "target not fetchable (empty repo, or GITHUB_TOKEN unset for a private repo) — no validation executed", 0)
+        return
+
+    def stage(msg: str) -> None:
+        heartbeat(run_id, msg)
+
+    result = run_discovery_and_validation(project, scope, files, log=stage)
+    pushed = 0
+    errors = 0
+    for f in result.get("findings", []):
+        try:
+            ingest_finding(f)
+            pushed += 1
+        except (RuntimeError, ValueError) as e:
+            errors += 1
+            log(f"ingest failed for {f.get('id')}: {e}")
+    note = result.get("note", "")
+    if pushed or errors:
+        note += f"; {pushed} finding(s) pushed"
+        if errors:
+            note += f", {errors} ingest error(s)"
+    _resolve(run_id, bool(result.get("ok")), note, pushed)
+
+
+def handle_remediation(run_id: str, project: str, scope: Dict[str, Any]) -> None:
+    """Full secure loop. Prefers LOCAL_CLONE_PATH (the engine's own checkout
+    of the target); falls back to fetching the repo. The engine's own
+    APPROVAL_REQUIRED gate runs before any code is modified."""
+    if LOCAL_CLONE_PATH and os.path.isdir(LOCAL_CLONE_PATH):
+        files = load_files_from_dir(LOCAL_CLONE_PATH)
+        source = f"local clone {LOCAL_CLONE_PATH}"
+    else:
+        try:
+            files = fetch_repo_files(project)
+            source = "fetched repo"
+        except Exception as e:  # noqa: BLE001
+            _resolve(run_id, False, f"target fetch failed and LOCAL_CLONE_PATH is unset: {e}", 0)
+            return
+    if not files:
+        _resolve(run_id, False, "no target files — loop not executed", 0)
+        return
+    heartbeat(run_id, f"full secure loop: target = {source}")
+
+    def stage(msg: str) -> None:
+        heartbeat(run_id, msg)
+
+    result = run_full_secure_loop(project, scope, files, log=stage)
+    _resolve(run_id, bool(result.get("ok")), result.get("note", ""), 0)
+    if result.get("verdict"):
+        log(f"run {run_id} verdict: {result['verdict']} ({len(result.get('attackSteps', []))} step(s))")
+
+
 def handle_run(run: Dict[str, Any], dry_run: bool) -> None:
     claim = claim_run(run)
     if claim is None:
         return
     scope = claim.get("scope") or {"authorizedPaths": [], "blockedPaths": []}
+    kind = claim.get("kind", "validation")
     log(
-        f"claimed run {run['_id']} project={claim['projectId']} kind={claim['kind']} "
+        f"claimed run {run['_id']} project={claim['projectId']} kind={kind} "
         f"authorized={json.dumps(scope.get('authorizedPaths', []))} "
         f"blocked={json.dumps(scope.get('blockedPaths', []))}"
     )
     project = claim["projectId"]
-    authorized: List[str] = scope.get("authorizedPaths", [])
+    if kind == "scan":
+        handle_scan(run["_id"], project, scope)
+    elif kind == "remediation":
+        if dry_run:
+            _resolve(run["_id"], False, "dry run — full loop not executed", 0)
+        else:
+            handle_remediation(run["_id"], project, scope)
+    else:
+        handle_validation(run["_id"], project, scope, dry_run)
 
-    if dry_run:
-        # A dry run must never fetch+validate: it only verifies wiring and
-        # honestly reports that NO validation was executed.
-        api("/api/runs/resolve", method="POST", body={
-            "runId": run["_id"],
-            "ok": False,
-            "note": "python orchestrator dry run — wiring verified, no validation executed",
-            "findingsIngested": 0,
-        })
-        log(f"resolved run {run['_id']} as ok:false (dry run)")
-        return
 
-    # --- REAL VALIDATION PATH -------------------------------------------
-    # 1. Fetch the authorized target (repo files via GitHub).
-    # 2. validate() applies the scope FIRST: only files matching
-    #    authorizedPaths (and not blockedPaths) are ever inspected.
-    # 3. Every finding is real matched code with evidence; push each one.
-    # 4. Resolve with the true count (0 findings = ok, honest outcome).
-    # ---------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Approvals / revalidations: real apply + re-attack against LOCAL_CLONE_PATH
+# ---------------------------------------------------------------------------
+
+def _verify_on_clone(clone: str, category: str, validator_name: str) -> Dict[str, Any]:
+    """Start the real LocalTarget on the clone and run the category's real
+    validator. Returns the raw validation dict (has 'validated')."""
+    target = LocalTarget(clone)
+    target.start()
     try:
-        files = fetch_repo_files(project)
-    except Exception as e:  # fetch failure is an honest run failure
-        api("/api/runs/resolve", method="POST", body={
-            "runId": run["_id"],
-            "ok": False,
-            "note": f"target fetch failed: {e}",
-            "findingsIngested": 0,
-        })
-        log(f"resolved run {run['_id']} ok:false — fetch failed")
-        return
-
-    if not files:
-        api("/api/runs/resolve", method="POST", body={
-            "runId": run["_id"],
-            "ok": False,
-            "note": (
-                "target not fetchable (empty repo, or GITHUB_TOKEN unset for "
-                "a private repo) — no validation executed"
-            ),
-            "findingsIngested": 0,
-        })
-        log(f"resolved run {run['_id']} ok:false — no target files")
-        return
-
-    findings = validate(project, files, scope)
-    log(f"validators produced {len(findings)} finding(s) for {project}")
-
-    pushed = 0
-    errors = []
-    for f in findings:
-        try:
-            ingest_finding(f)
-            pushed += 1
-        except (RuntimeError, ValueError) as e:
-            # One bad finding must not kill the run; record and continue.
-            errors.append(f"{f.get('id')}: {e}")
-            log(f"ingest failed for {f.get('id')}: {e}")
-
-    note = f"{pushed} finding(s) pushed"
-    if errors:
-        note += f"; {len(errors)} ingest error(s)"
-    api("/api/runs/resolve", method="POST", body={
-        "runId": run["_id"],
-        "ok": True,
-        "note": note,
-        "findingsIngested": pushed,
-    })
-    log(f"resolved run {run['_id']} ok:true findingsIngested={pushed}")
-
+        validator = LocalAttackValidator(target.base_url)
+        method = getattr(validator, validator_name, None)
+        if method is None:
+            raise RuntimeError(f"validator not found: {validator_name}")
+        return method()
+    finally:
+        target.stop()
 
 
 def handle_approvals() -> None:
@@ -253,17 +343,53 @@ def handle_approvals() -> None:
         log(f"approvals/pending failed: {e}")
         return
     for a in approvals:
-        # === REAL ENGINE WORK: apply buffer, re-attack, resolve ============
-        # code = a["code"]; apply to the finding's file; run reverification;
-        # verdict = "VERIFIED_FIXED" if all steps blocked else "STILL_VULNERABLE"
-        # api("/api/approvals/resolve", method="POST", body={
-        #     "approvalId": a["_id"], "verdict": verdict,
-        #     "attackSteps": [{"name": s["name"], "verdict": "blocked"}, ...],
-        # })
-        log(
-            f"PENDING approval {a['_id']} finding={a['findingId']} source={a['source']} "
-            f"({len(a.get('code', ''))} chars) — apply buffer, re-attack, then resolve"
-        )
+        ctx = cache_load().get(a["findingId"])
+        if not ctx:
+            log(
+                f"PENDING approval {a['_id']} finding={a['findingId']} — "
+                "no engine context for this finding (ingested by another "
+                "engine instance?); leaving pending rather than guessing"
+            )
+            continue
+        if not (LOCAL_CLONE_PATH and os.path.isdir(LOCAL_CLONE_PATH)):
+            log(f"PENDING approval {a['_id']} — LOCAL_CLONE_PATH unset; waiting")
+            continue
+        rel = ctx.get("file", "")
+        target_file = os.path.abspath(os.path.join(LOCAL_CLONE_PATH, rel))
+        if not target_file.startswith(os.path.abspath(LOCAL_CLONE_PATH) + os.sep) or not os.path.isfile(target_file):
+            log(f"PENDING approval {a['_id']} — finding file {rel} not in clone; leaving pending")
+            continue
+        category = (ctx.get("vulnerabilityType") or "").upper().replace(" ", "_")
+        validator_name = (ctx.get("run") or {}).get("validator") or VALIDATOR_BY_CATEGORY.get(category, "")
+        if not validator_name.startswith("validate_"):
+            validator_name = VALIDATOR_BY_CATEGORY.get(category, "")
+        if not validator_name:
+            log(f"PENDING approval {a['_id']} — no validator for category {category}; leaving pending")
+            continue
+        backup = target_file + ".pg-backup"
+        shutil.copyfile(target_file, backup)
+        try:
+            with open(target_file, "w", encoding="utf-8") as fh:
+                fh.write(a.get("code", ""))
+            log(f"applied approved buffer to {rel}; re-attacking ({validator_name})")
+            result = _verify_on_clone(LOCAL_CLONE_PATH, category, validator_name)
+            blocked = not bool(result.get("validated"))
+            verdict = "VERIFIED_FIXED" if blocked else "STILL_VULNERABLE"
+            step_name = f"Engine validator {validator_name} executed against the controlled target"
+            api("/api/approvals/resolve", method="POST", body={
+                "approvalId": a["_id"],
+                "verdict": verdict,
+                "attackSteps": [{"name": step_name, "verdict": "blocked" if blocked else "exploitable"}],
+                "engineRunId": f"py-apply-{int(time.time())}",
+                "log": [f"[engine] applied buffer to {rel}", f"[engine] {result.get('evidence', '')}"],
+            })
+            log(f"resolved approval {a['_id']}: {verdict}")
+        except Exception as e:  # noqa: BLE001 — restore clone, stay honest
+            shutil.copyfile(backup, target_file)
+            log(f"approval {a['_id']} verification failed ({e}); buffer restored, approval left pending")
+        finally:
+            if os.path.exists(backup):
+                os.remove(backup)
 
 
 def handle_revalidations() -> None:
@@ -273,14 +399,35 @@ def handle_revalidations() -> None:
         log(f"revalidate/pending failed: {e}")
         return
     for r in revals:
-        # === REAL ENGINE WORK: fresh re-attack, then resolve ===============
-        # api("/api/revalidate/resolve", method="POST", body={
-        #     "revalidationId": r["_id"], "verdict": ..., "attackSteps": [...],
-        # })
-        log(
-            f"PENDING revalidation {r['_id']} finding={r['findingId']} — "
-            "re-attack, then POST /api/revalidate/resolve"
-        )
+        ctx = cache_load().get(r["findingId"])
+        if not ctx:
+            log(f"PENDING revalidation {r['_id']} — no engine context; leaving pending")
+            continue
+        if not (LOCAL_CLONE_PATH and os.path.isdir(LOCAL_CLONE_PATH)):
+            log(f"PENDING revalidation {r['_id']} — LOCAL_CLONE_PATH unset; waiting")
+            continue
+        category = (ctx.get("vulnerabilityType") or "").upper().replace(" ", "_")
+        validator_name = (ctx.get("run") or {}).get("validator") or VALIDATOR_BY_CATEGORY.get(category, "")
+        if not validator_name.startswith("validate_"):
+            validator_name = VALIDATOR_BY_CATEGORY.get(category, "")
+        if not validator_name:
+            log(f"PENDING revalidation {r['_id']} — no validator for {category}; leaving pending")
+            continue
+        try:
+            result = _verify_on_clone(LOCAL_CLONE_PATH, category, validator_name)
+            blocked = not bool(result.get("validated"))
+            verdict = "VERIFIED_FIXED" if blocked else "STILL_VULNERABLE"
+            step_name = f"Engine validator {validator_name} executed against the controlled target"
+            api("/api/revalidate/resolve", method="POST", body={
+                "revalidationId": r["_id"],
+                "verdict": verdict,
+                "attackSteps": [{"name": step_name, "verdict": "blocked" if blocked else "exploitable"}],
+                "engineRunId": f"py-reval-{int(time.time())}",
+                "log": [f"[engine] fresh re-attack ({validator_name})", f"[engine] {result.get('evidence', '')}"],
+            })
+            log(f"resolved revalidation {r['_id']}: {verdict}")
+        except Exception as e:  # noqa: BLE001
+            log(f"revalidation {r['_id']} failed ({e}); left pending — no verdict invented")
 
 
 def poll_pass(dry_run: bool) -> bool:
@@ -293,8 +440,9 @@ def poll_pass(dry_run: bool) -> bool:
         log("no queued runs")
     for run in runs:
         handle_run(run, dry_run)
-    handle_approvals()
-    handle_revalidations()
+    if not dry_run:
+        handle_approvals()
+        handle_revalidations()
     return bool(runs)
 
 
@@ -302,20 +450,18 @@ def main() -> None:
     _require_env()
     parser = argparse.ArgumentParser(description="PurpleGuard engine loop")
     parser.add_argument("--once", action="store_true", help="single poll pass")
-    parser.add_argument(
-        "--dry-run", action="store_true",
-        help="claim runs, observe scope, resolve ok:false — no validation",
-    )
+    parser.add_argument("--dry-run", action="store_true", help="claim runs, observe scope, resolve ok:false — no validation")
     args = parser.parse_args()
 
-    log(f"starting against {SITE}{' (dry-run)' if args.dry_run else ''}")
+    log(f"starting against {SITE}{' (dry-run)' if args.dry_run else ''}"
+        f"{' clone=' + LOCAL_CLONE_PATH if LOCAL_CLONE_PATH else ''}")
     had_work = True
     while not args.once:
         if not had_work:
             time.sleep(POLL_INTERVAL_SECONDS)
         try:
             had_work = poll_pass(args.dry_run)
-        except Exception as e:  # keep the loop alive
+        except Exception as e:  # noqa: BLE001
             log(f"poll pass error: {e}")
             had_work = False
             time.sleep(POLL_INTERVAL_SECONDS)

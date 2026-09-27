@@ -17,6 +17,8 @@ const DeveloperPanel = lazy(() => import("./pages/DeveloperPanel.tsx"));
 const HackerPanel = lazy(() => import("./pages/HackerPanel.tsx"));
 const EccPanel = lazy(() => import("./pages/EccPanel.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+const ScannerPanel = lazy(() => import("./pages/ScannerPanel.tsx"));
+const EngineerPanel = lazy(() => import("./pages/EngineerPanel.tsx"));
 
 // Simple loading fallback for route transitions
 function RouteLoading() {
@@ -25,24 +27,6 @@ function RouteLoading() {
       <div className="animate-pulse text-muted-foreground">Loading...</div>
     </div>
   );
-}
-
-/** Silent error boundary — if VlyToolbar crashes it renders nothing instead of
- *  crashing the whole app (e.g. hook errors in WebContainer environment). */
-class ToolbarErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean }
-> {
-  state = { hasError: false };
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  componentDidCatch(err: Error) {
-    console.warn("[VlyToolbar] Caught error, toolbar disabled:", err.message);
-  }
-  render() {
-    return this.state.hasError ? null : this.props.children;
-  }
 }
 
 /** Hard guard so runtime errors never leave the preview as a blank page. */
@@ -173,6 +157,8 @@ createRoot(document.getElementById("root")!).render(
                   </RequireAuth>
                 }
               />
+              <Route path="/scanner" element={<RequireAuth><ScannerPanel /></RequireAuth>} />
+              <Route path="/engineer" element={<RequireAuth><EngineerPanel /></RequireAuth>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

@@ -1,26 +1,40 @@
-node_modules
-dist
-dist-ssr
+# Node
+node_modules/
+dist/
+dist-ssr/
 *.local
 
 # Freebuff/Vly workspace artifacts
 isolate/
 .vly/
 
-# Convex generated (regenerate with: bunx convex dev --once)
+# Convex generated
 src/convex/_generated/
 
 # Python engine
 __pycache__/
 *.py[cod]
 .venv/
+venv/
+env/
 *.egg-info/
+
+# Reports
 reports/*.json
 reports/*.html
 
-# Env — never commit
+# Environment secrets
 .env
 .env.*
+*.key
+*.pem
+
+# Python engine local state
+scripts/engine/.env
+scripts/engine/.purpleguard-findings.json
+
+# Build artifacts
+build/
 
 # OS
 .DS_Store
