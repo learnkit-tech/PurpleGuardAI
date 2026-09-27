@@ -1,22 +1,26 @@
-# Python
+node_modules
+dist
+dist-ssr
+*.local
+
+# Freebuff/Vly workspace artifacts
+isolate/
+.vly/
+
+# Convex generated (regenerate with: bunx convex dev --once)
+src/convex/_generated/
+
+# Python engine
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Environment secrets
-.env
-*.key
-*.pem
-
-# Virtual environments
-venv/
-env/
-
-# Reports
-reports/*.json
-
-# Build artifacts
+*.py[cod]
+.venv/
 *.egg-info/
-build/
-dist/
+reports/*.json
+reports/*.html
+
+# Env — never commit
+.env
+.env.*
+
+# OS
+.DS_Store

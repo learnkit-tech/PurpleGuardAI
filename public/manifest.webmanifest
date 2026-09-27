@@ -1,0 +1,17 @@
+{
+  "name": "PurpleGuard AI — Autonomous Cybersecurity",
+  "short_name": "PurpleGuard AI",
+  "description": "PurpleGuard AI continuously detects, understands, prioritizes, and remediates security risks while ECC coordinates intelligent AI agents.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07060a",
+  "theme_color": "#07060a",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
