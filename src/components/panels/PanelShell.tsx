@@ -16,13 +16,15 @@ import { useAuth } from "@/hooks/use-auth";
 import { useProjectSelection } from "@/hooks/useProjectSelection";
 import { cn } from "@/lib/utils";
 
-export type PanelId = "console" | "hacker" | "developer" | "ecc";
+export type PanelId = "console" | "hacker" | "developer" | "ecc" | "scanner" | "engineer";
 
 const PANELS: Array<{ id: PanelId; label: string; href: string }> = [
   { id: "console", label: "Console", href: "/dashboard" },
   { id: "hacker", label: "Hacker", href: "/hacker" },
   { id: "developer", label: "Developer", href: "/developer" },
   { id: "ecc", label: "ECC", href: "/ecc" },
+{ id: "scanner", label: "Scanner", href: "/scanner" },
+{ id: "engineer", label: "AI Engineer", href: "/engineer" },
 ];
 
 /**
