@@ -166,6 +166,41 @@ def _map_hacker_finding(
 
     validated = bool(cf.get("validated"))
     category = cf.get("category", "")
+
+    # Phase 4.1: preserve the validator's raw HTTP artifacts as structured
+    # evidence when they exist. Absent artifacts produce NO evidence.
+    http_evidence = []
+    request_art = cf.get("request")
+    if isinstance(request_art, dict):
+        status = request_art.get("status")
+        if status is not None:
+            http_evidence.append({
+                "id": "ev-http-status",
+                "kind": "request",
+                "label": "Observed HTTP status",
+                "content": str(status),
+            })
+        body = request_art.get("body")
+        if isinstance(body, str) and body.strip():
+            http_evidence.append({
+                "id": "ev-http-body",
+                "kind": "response",
+                "label": "Observed response body (excerpt)",
+                "content": body[:500],
+            })
+        headers = request_art.get("headers")
+        if isinstance(headers, dict) and headers:
+            interesting = {
+                k: v for k, v in headers.items()
+                if str(k).lower() in ("location", "content-type", "content-length")
+            }
+            if interesting:
+                http_evidence.append({
+                    "id": "ev-http-headers",
+                    "kind": "response",
+                    "label": "Observed response headers (subset)",
+                    "content": "\n".join(f"{k}: {v}" for k, v in interesting.items()),
+                })
     attack_steps = [
         {
             "name": f"Engine validator {cf.get('validator', '')} executed against the controlled target",
@@ -178,7 +213,11 @@ def _map_hacker_finding(
             "log": [
                 f"[engine] validator={cf.get('validator', '')} validated={validated}",
                 f"[engine] evidence: {cf.get('evidence', '')}",
-            ],
+            ] + (
+                [f"[engine] observed HTTP status: {request_art['status']}"]
+                if isinstance(request_art, dict) and request_art.get("status") is not None
+                else []
+            ),
         },
         {
             "name": "Post-remediation re-attack replay",
@@ -226,7 +265,7 @@ def _map_hacker_finding(
         "fixedCode": None,
         "reTestChecks": [_RETEST_CHECKS.get(category, "Replay of the recorded payload no longer succeeds")],
         "vulnerableMarker": _redact(cf.get("payload", "")),
-        "evidence": [
+        "evidence": http_evidence + [
             {
                 "id": "ev-validator",
                 "kind": "execution",

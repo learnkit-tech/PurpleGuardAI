@@ -235,12 +235,15 @@ def handle_validation(run_id: str, project: str, scope: Dict[str, Any], dry_run:
         _resolve(run_id, False, "python orchestrator dry run — wiring verified, no validation executed", 0)
         log(f"resolved run {run_id} as ok:false (dry run)")
         return
-    heartbeat(run_id, "validation: fetching authorized target")
-    try:
-        files = fetch_repo_files(project)
-    except Exception as e:  # noqa: BLE001
-        _resolve(run_id, False, f"target fetch failed: {e}", 0)
-        return
+    heartbeat(run_id, "validation: resolving authorized target")
+    if LOCAL_CLONE_PATH and os.path.isdir(LOCAL_CLONE_PATH):
+        files = load_files_from_dir(LOCAL_CLONE_PATH)  # local fixture/clone source
+    else:
+        try:
+            files = fetch_repo_files(project)
+        except Exception as e:  # noqa: BLE001
+            _resolve(run_id, False, f"target fetch failed: {e}", 0)
+            return
     if not files:
         _resolve(run_id, False, "target not fetchable (empty repo, or GITHUB_TOKEN unset for a private repo) — no validation executed", 0)
         return
@@ -343,7 +346,7 @@ def handle_approvals() -> None:
         log(f"approvals/pending failed: {e}")
         return
     for a in approvals:
-        ctx = cache_load().get(a["findingId"])
+        ctx = a.get("finding") or cache_load().get(a["findingId"])
         if not ctx:
             log(
                 f"PENDING approval {a['_id']} finding={a['findingId']} — "
@@ -399,7 +402,7 @@ def handle_revalidations() -> None:
         log(f"revalidate/pending failed: {e}")
         return
     for r in revals:
-        ctx = cache_load().get(r["findingId"])
+        ctx = r.get("finding") or cache_load().get(r["findingId"])
         if not ctx:
             log(f"PENDING revalidation {r['_id']} — no engine context; leaving pending")
             continue

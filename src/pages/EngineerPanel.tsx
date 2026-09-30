@@ -166,6 +166,29 @@ export default function EngineerPanel() {
                   </div>
                 )}
 
+                {selected.evidence && selected.evidence.length > 0 && (
+                  <div>
+                    <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                      Evidence ({selected.evidence.length})
+                    </p>
+                    <div className="space-y-2">
+                      {selected.evidence.map((e) => (
+                        <div
+                          key={e.id}
+                          className="rounded-lg border border-white/10 bg-black/30 p-3"
+                        >
+                          <p className="font-mono text-[10px] text-cyan-300/80">
+                            {e.kind} · {e.label}
+                          </p>
+                          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
+                            {e.content}
+                          </pre>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {proposed ? (
                   <div>
                     <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-violet-300">
