@@ -3,7 +3,7 @@ import json
 import os
 
 from dev_agent.run_agent import main
-from dev_agent.status import update_status
+from dev_agent.status import update_status, get_status, security_completion_status
 from dev_agent.autonomous_planner import AutonomousPlanner
 
 
@@ -76,7 +76,13 @@ def run_worker():
             main(current["task"])
 
 
-            current["status"] = "completed"
+            # A security coordination task pauses for a human: the
+            # loop records "awaiting_approval" and the worker must
+            # neither mark it completed nor re-run it autonomously.
+            current["status"] = security_completion_status(
+                current["task"],
+                get_status()
+            )
 
             save_tasks(tasks)
 

@@ -1,5 +1,6 @@
 import sys
 import os
+import subprocess
 import threading
 
 sys.path.append(
@@ -15,12 +16,18 @@ from scanner.engine import SecurityScanner
 from hacker.orchestrator import PurpleGuardSecurityOrchestrator
 
 # dev_agent is optional — only needed for /agent/* endpoints.
-# The two imports are split so a missing optional dependency in the
+# The two probes are split so a missing optional dependency in the
 # full agent loop (e.g. `requests` via agent_api.llm_provider) does
 # not take down the lightweight status endpoint with it.
-dev_agent_main = None
+# IMPORTANT: never import dev_agent.run_agent here — that module tags
+# its process as the autonomous approval surface (PG_EXEC_SURFACE),
+# and this API process must stay untagged so frontend /secure
+# approvals keep working. The loop runs in a subprocess instead; the
+# run-availability probe imports the loop module itself, which sets
+# no tag.
 dev_agent_get_status = None
 dev_agent_update_status = None
+dev_agent_available = False
 try:
     from dev_agent.status import get_status as _dev_get, update_status as _dev_update
     dev_agent_get_status = _dev_get
@@ -28,8 +35,8 @@ try:
 except Exception:
     pass
 try:
-    from dev_agent.run_agent import main as _dev_main
-    dev_agent_main = _dev_main
+    from dev_agent.loop import DeveloperAgent as _dev_agent_cls
+    dev_agent_available = True
 except Exception:
     pass
 
@@ -219,7 +226,7 @@ def agent_status():
 @app.route("/agent/run", methods=["POST"])
 def agent_run():
 
-    if dev_agent_main is None:
+    if not dev_agent_available:
         return jsonify({"error": "dev_agent not available"}), 503
 
     def run_agent():
@@ -230,11 +237,32 @@ def agent_run():
 
         try:
 
-            dev_agent_main()
+            # Run the loop in its own process. dev_agent/run_agent.py
+            # tags that process tree as the autonomous surface
+            # (PG_EXEC_SURFACE), which purpleguard_runner refuses to
+            # approve. Isolating it here keeps THIS api process
+            # untagged, so frontend approvals via /secure are never
+            # affected by an agent run.
+            project_root = os.path.dirname(
+                os.path.dirname(os.path.abspath(__file__))
+            )
+            completed = subprocess.run(
+                [sys.executable, "-m", "dev_agent.run_agent"],
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+                timeout=1800,
+            )
 
-            dev_agent_update_status({
-                "status": "completed"
-            })
+            if completed.returncode == 0:
+                dev_agent_update_status({
+                    "status": "completed"
+                })
+            else:
+                dev_agent_update_status({
+                    "status": "error",
+                    "message": (completed.stderr or "agent run failed")[-500:],
+                })
 
         except Exception as error:
 

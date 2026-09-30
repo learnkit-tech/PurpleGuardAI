@@ -56,6 +56,22 @@ class DeveloperAgent:
         print(route)
 
 
+        # ECC/PurpleGuard coordination: a security pipeline task is
+        # executed through the bridge propose-only. The loop must not
+        # generate code for it, and it must never approve: the run
+        # stops at APPROVAL_REQUIRED and records "awaiting_approval"
+        # for a human to act on outside this process.
+        if route["area"] == "security" and self._is_secure_coordination(
+            task["task"]
+        ):
+            from dev_agent.security_coordination import (
+                run_security_coordination,
+            )
+
+            run_security_coordination(task, route)
+            return
+
+
         self.git.checkpoint()
 
 
@@ -132,4 +148,16 @@ Goal:
 
         save_memory(
             self.memory
+        )
+
+
+    @staticmethod
+    def _is_secure_coordination(task_text):
+
+        text = task_text.lower()
+
+        return (
+            "secure" in text
+            or "purpleguard" in text
+            or "security pipeline" in text
         )
