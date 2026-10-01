@@ -20,3 +20,10 @@ reports/*.json
 *.egg-info/
 build/
 dist/
+
+# Node
+node_modules/
+.env.local
+
+# Convex generated files
+src/convex/_generated/
