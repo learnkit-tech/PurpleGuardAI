@@ -1,0 +1,81 @@
+{
+  "playbooks_version": "1.0",
+  "playbooks": [
+    {
+      "playbook_id": "security.static_review",
+      "name": "Static security review",
+      "trigger": ["manual assessment", "new project", "scheduled reassessment"],
+      "required_context": ["project_id", "target_path"],
+      "participating_agents": ["security-reviewer"],
+      "steps": [
+        "collect target scope",
+        "run static analysis",
+        "normalize findings",
+        "collect evidence",
+        "correlate"
+      ],
+      "tools": ["scanner.engine.SecurityScanner"],
+      "evidence_requirements": ["rule_id", "severity", "file", "line", "code"],
+      "approval_gate": false,
+      "expected_outputs": ["findings", "evidence", "recommendations"],
+      "verification_requirements": ["evidence-completeness"],
+      "failure_handling": "structured error; no partial success reported"
+    },
+    {
+      "playbook_id": "security.correlate_findings",
+      "name": "Correlate and deduplicate findings",
+      "trigger": ["finding created", "multiple agents reported"],
+      "required_context": ["project_id", "recent_results"],
+      "participating_agents": [],
+      "steps": ["fingerprint each finding", "merge by fingerprint", "preserve provenance", "set validation_state"],
+      "tools": [],
+      "evidence_requirements": ["source agents", "task ids"],
+      "approval_gate": false,
+      "expected_outputs": ["canonical_findings"],
+      "verification_requirements": ["no duplicate canonical findings"],
+      "failure_handling": "keep prior canonical state unchanged"
+    },
+    {
+      "playbook_id": "security.validate_finding",
+      "name": "Validate a suspected finding",
+      "trigger": ["high/critical finding", "level requires validation"],
+      "required_context": ["project_id", "finding", "authorized target"],
+      "participating_agents": ["e2e-runner", "agent-evaluator"],
+      "steps": ["confirm authorization", "exercise target", "collect reproduction", "assess evidence quality"],
+      "tools": ["hacker.orchestrator.PurpleGuardSecurityOrchestrator", "scanner.engine.SecurityScanner"],
+      "evidence_requirements": ["reproduction", "before/after", "artifact"],
+      "approval_gate": true,
+      "expected_outputs": ["validation_state", "evidence"],
+      "verification_requirements": ["reproducibility", "authorization recorded"],
+      "failure_handling": "leave finding unvalidated; escalate"
+    },
+    {
+      "playbook_id": "security.verify_remediation",
+      "name": "Verify remediation and re-test",
+      "trigger": ["remediation completed", "approval granted"],
+      "required_context": ["project_id", "finding", "remediation"],
+      "participating_agents": ["tdd-guide", "security-reviewer"],
+      "steps": ["re-scan target", "re-run tests", "re-attack if applicable", "compare evidence"],
+      "tools": ["scanner.engine.SecurityScanner", "tests"],
+      "evidence_requirements": ["post-fix scan", "test result"],
+      "approval_gate": true,
+      "expected_outputs": ["verification_state", "evidence"],
+      "verification_requirements": ["three-layer agreement"],
+      "failure_handling": "do not mark verified; keep finding open"
+    },
+    {
+      "playbook_id": "security.reassess_changed_code",
+      "name": "Reassess newly changed code",
+      "trigger": ["new commit", "pull request", "new endpoint", "configuration change"],
+      "required_context": ["project_id", "changed files", "previous findings"],
+      "participating_agents": ["code-reviewer", "security-reviewer"],
+      "steps": ["scope changed code", "check regressions on previously vulnerable areas", "static review", "correlate"],
+      "tools": ["scanner.engine.SecurityScanner"],
+      "evidence_requirements": ["file", "line", "code"],
+      "approval_gate": false,
+      "expected_outputs": ["findings", "regressions"],
+      "verification_requirements": ["evidence-completeness"],
+      "failure_handling": "structured error; retain prior state"
+    }
+  ]
+}

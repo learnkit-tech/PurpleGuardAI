@@ -5,9 +5,15 @@ from scanner.rules.registry import RULES
 
 class SecurityScanner:
 
-    def __init__(self, path):
+    def __init__(self, path, rules=None):
         self.path = path
         self.findings = []
+
+        # The default rule set is the scanner's own registry. A caller
+        # (for example the security workforce) may supply an explicit
+        # rule set to run a focused or extended analysis without
+        # changing the default scan behaviour for everyone else.
+        self.rules = list(RULES) if rules is None else list(rules)
 
         self.ignore_dirs = {
             ".git",
@@ -44,7 +50,7 @@ class SecurityScanner:
         with open(filepath, "r", errors="ignore") as f:
             lines = f.readlines()
 
-        for rule in RULES:
+        for rule in self.rules:
 
             rule_findings = rule.check(
                 filepath,

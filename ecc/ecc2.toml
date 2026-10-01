@@ -1,0 +1,50 @@
+# PurpleGuard harness runner.
+#
+# ecc2 passes base_args verbatim (no tilde or environment expansion -
+# see build_configured_harness_command in src/session/manager.rs), so a
+# hard-coded absolute path only works on one host: the previous
+# phone-only install path broke on every other machine, and "python"
+# is not on PATH on all hosts. The -c bootstrap below discovers
+# purpleguard_runner.py at runtime, in order: the PURPLEGUARD_HOME
+# variable, ~/PurpleGuardAI (the phone location - unchanged behavior
+# there), the install path, then the current working directory.
+default_agent = "claude"
+
+[harness_runners.purpleguard]
+program = "python3"
+base_args = [
+    "-c",
+    '''
+import os, pathlib, runpy, sys
+candidates = [
+    os.environ.get("PURPLEGUARD_HOME"),
+    str(pathlib.Path.home() / "PurpleGuardAI"),
+    "/home/daytona/codebase",
+    str(pathlib.Path.cwd()),
+]
+for root in candidates:
+    if not root:
+        continue
+    runner = pathlib.Path(root).expanduser() / "purpleguard_runner.py"
+    if runner.is_file():
+        sys.path.insert(0, str(runner.parent))
+        sys.argv = [str(runner)] + sys.argv[1:]
+        runpy.run_path(str(runner), run_name="__main__")
+        sys.exit(0)
+sys.exit(
+    "purpleguard_runner.py not found; set PURPLEGUARD_HOME "
+    "to your PurpleGuard install"
+)
+''',
+]
+cwd_flag = "--cwd"
+task_flag = "--task"
+
+project_markers = [
+    "pyproject.toml",
+    "Cargo.toml",
+    "package.json",
+]
+
+[harness_runners.purpleguard.env]
+ECC_HARNESS = "purpleguard"

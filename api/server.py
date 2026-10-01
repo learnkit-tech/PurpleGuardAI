@@ -2,6 +2,7 @@ import sys
 import os
 import subprocess
 import threading
+from pathlib import Path
 
 sys.path.append(
     os.path.dirname(
@@ -207,6 +208,173 @@ def secure():
             "status": "error",
             "error": str(error)
         }), 500
+
+
+# ---------------------------------------------------------
+# Security Agent Workforce (real engine path)
+#
+# These endpoints expose the PurpleGuard-native workforce through the
+# SAME backend that already serves /scan and /secure. They run the
+# real engines and return actual execution state and evidence.
+#
+# Security posture (unchanged from the rest of this API):
+#   * every endpoint validates its target and returns deterministic
+#     error payloads;
+#   * the read endpoints never write anything;
+#   * workflow state lives under a configurable directory so tests and
+#     deployments can isolate it (PURPLEGUARD_WORKFORCE_DIR);
+#   * source is never modified except through the explicit approval
+#     endpoint, and never without approve == true.
+# ---------------------------------------------------------
+
+def _workforce_state_dir():
+    base = os.environ.get("PURPLEGUARD_WORKFORCE_DIR")
+    return Path(base) if base else None
+
+
+def _workforce_orchestrator():
+    from security_workforce import WorkforceOrchestrator, WorkforceStore
+
+    state = _workforce_state_dir()
+    if state is None:
+        return WorkforceOrchestrator()
+    return WorkforceOrchestrator(
+        store=WorkforceStore(state / "security_workforce.json")
+    )
+
+
+def _workforce_handoff(workforce):
+    from security_workforce import DeveloperHandoff
+
+    state = _workforce_state_dir()
+    if state is None:
+        return DeveloperHandoff(workforce.store)
+    return DeveloperHandoff(
+        workforce.store,
+        handoff_path=state / "handoff.json",
+        status_path=state / "dev_status.json",
+    )
+
+
+def _resolve_target(raw):
+    """Shared target validation. Returns (target, error_response)."""
+    if not raw or not str(raw).strip():
+        return None, (jsonify({"error": "target is required"}), 400)
+
+    target = os.path.abspath(os.path.expanduser(str(raw)))
+
+    if not os.path.isdir(target):
+        return None, (jsonify({
+            "error": "target directory does not exist",
+            "target": target,
+        }), 400)
+
+    return target, None
+
+
+@app.route("/workforce/capabilities")
+def workforce_capabilities():
+    try:
+        workforce = _workforce_orchestrator()
+        return jsonify({
+            "status": "ok",
+            "capabilities": workforce.capabilities(),
+        })
+    except Exception as error:
+        return jsonify({"status": "error", "error": str(error)}), 500
+
+
+@app.route("/workforce/findings")
+def workforce_findings():
+    try:
+        workforce = _workforce_orchestrator()
+        findings = workforce.canonical_findings()
+        return jsonify({
+            "status": "ok",
+            "count": len(findings),
+            "findings": findings,
+        })
+    except Exception as error:
+        return jsonify({"status": "error", "error": str(error)}), 500
+
+
+@app.route("/workforce/assess", methods=["POST"])
+def workforce_assess():
+    data = request.get_json(silent=True) or {}
+
+    target, error = _resolve_target(data.get("target"))
+    if error is not None:
+        return error
+
+    try:
+        workforce = _workforce_orchestrator()
+        assessment = workforce.assess(
+            target, approved=bool(data.get("approved", False))
+        )
+        return jsonify({"status": "ok", "assessment": assessment})
+    except Exception as error:
+        return jsonify({"status": "error", "error": str(error)}), 500
+
+
+@app.route("/workforce/handoff", methods=["GET", "POST"])
+def workforce_handoff():
+    """GET: pending developer items. POST: send canonical findings.
+
+    Neither applies remediation: approval is an explicit, separate step.
+    """
+    try:
+        workforce = _workforce_orchestrator()
+        handoff = _workforce_handoff(workforce)
+
+        if request.method == "GET":
+            return jsonify({
+                "status": "ok",
+                "pending": handoff.pending(),
+            })
+
+        data = request.get_json(silent=True) or {}
+        target, error = _resolve_target(data.get("target"))
+        if error is not None:
+            return error
+
+        result = handoff.send(workforce.canonical_findings(), target=target)
+        return jsonify({"status": "ok", **result})
+    except Exception as error:
+        return jsonify({"status": "error", "error": str(error)}), 500
+
+
+@app.route("/workforce/approve", methods=["POST"])
+def workforce_approve():
+    """Explicit human approval -> remediation -> genuine re-test.
+
+    Without ``approve`` true this returns APPROVAL_REQUIRED and modifies
+    nothing. With it, remediation runs and a real re-test decides the
+    verdict; the endpoint never marks a finding verified by itself.
+    """
+    data = request.get_json(silent=True) or {}
+    fingerprint = data.get("fingerprint")
+
+    if not fingerprint:
+        return jsonify({"error": "fingerprint is required"}), 400
+
+    try:
+        workforce = _workforce_orchestrator()
+        handoff = _workforce_handoff(workforce)
+
+        if handoff.get(fingerprint) is None:
+            return jsonify({
+                "status": "NOT_FOUND",
+                "fingerprint": fingerprint,
+            }), 404
+
+        result = handoff.approve_and_remediate(
+            fingerprint,
+            approve=bool(data.get("approve", False)),
+            target=data.get("target"),
+        )
+        return jsonify({"status": "ok", **result})
+    except Exception as error:
+        return jsonify({"status": "error", "error": str(error)}), 500
 
 
 # ---------------------------------------------------------

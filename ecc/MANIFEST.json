@@ -1,0 +1,221 @@
+{
+  "schema_version": "1.0",
+  "kind": "ecc-extraction-manifest",
+  "product": "PurpleGuardAI",
+  "extraction": {
+    "created": "2026-09-30",
+    "method": "git -C <ecc> archive HEAD -- <paths> | tar -x -C ecc/",
+    "tracked_files_only": true,
+    "reversible": true,
+    "checksums_file": "CHECKSUMS.sha256",
+    "extracted_files_from_ecc": 171,
+    "authored_files": [
+      "ecc/README.md",
+      "ecc/PROVENANCE.md",
+      "ecc/AGENTS.md",
+      "ecc/MANIFEST.json",
+      "ecc/CHECKSUMS.sha256",
+      "ecc/bridge/README.md",
+      "ecc/bridge/__init__.py",
+      "ecc/bridge/contracts.py",
+      "ecc/bridge/catalog.py",
+      "ecc/bridge/harness.py",
+      "ecc/bridge/runtime.py",
+      "ecc/bridge/client.py",
+      "ecc/bridge/workforce/__init__.py",
+      "ecc/bridge/workforce/contracts.py",
+      "ecc/bridge/workforce/roles.py",
+      "ecc/bridge/workforce/store.py",
+      "ecc/bridge/workforce/orchestrator.py",
+      "ecc/bridge/workforce/agents/__init__.py",
+      "ecc/bridge/workforce/agents/security_reviewer.py"
+    ]
+  },
+  "source": {
+    "repository": "learnkit-tech/ECC",
+    "upstream_project": "affaan-m/ECC (\"Everything Claude Code\")",
+    "branch": "main",
+    "commit": "9c19aabe0f6506a4d0f47945e3f6cae59d7e4e7c",
+    "commit_subject": "fix(ecc2): make purpleguard harness runner host-portable",
+    "commit_date": "2026-09-23T08:33:34+00:00",
+    "license": "MIT (Copyright (c) 2026 Affaan Mustafa)",
+    "upstream_modified": false
+  },
+  "decisions": {
+    "llm_provider_layer": {
+      "decision": "retain PurpleGuard's own provider layer (agent_api/llm_provider.py, llm_client.py)",
+      "ecc_src_llm": "DEFERRED — not extracted; adopting it later must go through ecc/bridge as a single provider layer",
+      "rationale": "PurpleGuard already owns a working provider layer; do not replace working infrastructure."
+    },
+    "integration_style": {
+      "decision": "controlled bridge, not porting",
+      "rationale": "ECC capabilities are reached via ecc/bridge; PurpleGuard security engine stays authoritative; ecc2 is built and bridged, not translated."
+    }
+  },
+  "components": [
+    {
+      "id": "ecc2",
+      "source_paths": ["ecc2/"],
+      "destination": "ecc/ecc2/",
+      "kind": "rust-crate",
+      "disposition": "EXTRACT",
+      "reason": "ECC 2.0 control plane: session store/lifecycle, 4-axis risk scoring, worktree management, inter-agent comms, TUI.",
+      "file_count": 21,
+      "dependencies": ["Rust toolchain", "ratatui", "crossterm", "tokio", "rusqlite", "serde", "clap", "chrono", "uuid", "git2", "sha2", "regex", "anyhow"],
+      "integration_method": "BUILD the crate; invoke/reach through ecc/bridge (Decision B). Not built by PurpleGuard's Python package.",
+      "tests": "ecc2 unit tests are inside the crate (session/observability/config/manager/etc.)",
+      "notes": "tui/ is included because the crate compiles as a unit; TUI is reference-only. Self-described alpha."
+    },
+    {
+      "id": "harness",
+      "source_paths": ["ecc2.toml", "agent.yaml"],
+      "destination": "ecc/ecc2.toml, ecc/agent.yaml",
+      "kind": "config",
+      "disposition": "EXTRACT",
+      "reason": "The [harness_runners.purpleguard] config that dispatches ECC tasks to purpleguard_runner.py, and the ECC agent/skill manifest.",
+      "file_count": 2,
+      "dependencies": ["python3 at runtime when the harness fires"],
+      "integration_method": "Consumed by ecc2; documents the ECC->PurpleGuard invocation contract.",
+      "tests": "Covered by PurpleGuard tests/unit/test_ecc_bridge.py"
+    },
+    {
+      "id": "integrations-aura",
+      "source_paths": ["integrations/aura/"],
+      "destination": "ecc/integrations/aura/",
+      "kind": "python",
+      "disposition": "EXTRACT",
+      "reason": "Reusable template for an opt-in, fail-closed external trust gate with a threat model.",
+      "file_count": 7,
+      "dependencies": ["python stdlib only (urllib)"],
+      "integration_method": "Optional; call through ecc/bridge if a trust gate is added. Read-only network GET; no secrets.",
+      "tests": "ecc/integrations/aura/tests/test_adapter.py (offline, recorded fixtures)"
+    },
+    {
+      "id": "agents",
+      "source_paths": ["agents/<20 curated>.md"],
+      "destination": "ecc/agents/",
+      "kind": "markdown",
+      "disposition": "EXTRACT",
+      "reason": "Role definitions for the PurpleGuard Security Agent Workforce (see docs/ECC_AGENT_WORKFORCE.md).",
+      "file_count": 20,
+      "dependencies": [],
+      "integration_method": "Foundation of the agent workforce; available adapters are exposed via ecc/bridge/workforce/.",
+      "agents": ["security-reviewer", "database-reviewer", "mle-reviewer", "network-config-reviewer", "code-explorer", "comment-analyzer", "spec-miner", "network-architect", "code-reviewer", "python-reviewer", "network-troubleshooter", "silent-failure-hunter", "e2e-runner", "agent-evaluator", "tdd-guide", "architect", "planner", "chief-of-staff", "loop-operator", "harness-optimizer"]
+    },
+    {
+      "id": "skills",
+      "source_paths": ["skills/<16 curated dirs>"],
+      "destination": "ecc/skills/",
+      "kind": "markdown+assets",
+      "disposition": "EXTRACT",
+      "reason": "Reusable skill specs for security review/scan, verification, eval, continuous/autonomous loops, orchestration, TDD, budgets, python patterns.",
+      "file_count": 23,
+      "dependencies": ["some skills ship helper scripts (python) as assets; not imported by PurpleGuard"],
+      "integration_method": "Reference; not wired. Reach any executable skill logic via ecc/bridge.",
+      "skills": ["security-review", "security-scan", "verification-loop", "agent-eval", "eval-harness", "agent-self-evaluation", "continuous-agent-loop", "autonomous-loops", "plan-orchestrate", "tdd-workflow", "context-budget", "token-budget-advisor", "python-testing", "python-patterns", "error-handling", "search-first"]
+    },
+    {
+      "id": "commands",
+      "source_paths": ["commands/<41 curated>.md"],
+      "destination": "ecc/commands/",
+      "kind": "markdown",
+      "disposition": "EXTRACT",
+      "reason": "Orchestration/planning/security/session command definitions (orch-*, multi-*, plan*, prp-*, epic-*, sessions, quality-gate, security-scan, ...).",
+      "file_count": 41,
+      "dependencies": [],
+      "integration_method": "Reference for orchestration workflows; no PurpleGuard wiring yet.",
+      "sets": ["orch-*", "multi-*", "plan", "plan-prd", "prp-*", "epic-*", "sessions", "save-session", "resume-session", "checkpoint", "quality-gate", "security-scan", "loop-*", "harness-audit", "evolve", "santa-loop", "build-fix", "code-review", "python-review", "test-coverage", "update-docs", "update-codemaps", "refactor-clean", "feature-dev", "learn", "learn-eval", "pr"]
+    },
+    {
+      "id": "rules",
+      "source_paths": ["rules/README.md", "rules/common", "rules/python", "rules/web"],
+      "destination": "ecc/rules/",
+      "kind": "markdown",
+      "disposition": "EXTRACT",
+      "reason": "Coding/security/style rules relevant to PurpleGuard's Python + web stack.",
+      "file_count": 24,
+      "dependencies": [],
+      "integration_method": "Reference; non-Python/web language rule packs intentionally omitted.",
+      "excluded_rule_packs": ["angular", "arkts", "cpp", "csharp", "dart", "fsharp", "golang", "java", "kotlin", "nuxt", "perl", "php", "react", "ruby", "rust", "swift", "typescript", "vue"]
+    },
+    {
+      "id": "schemas",
+      "source_paths": ["schemas/"],
+      "destination": "ecc/schemas/",
+      "kind": "json",
+      "disposition": "EXTRACT",
+      "reason": "Reusable JSON contracts (state store, provenance, hooks, install) to inform task/result/event contracts.",
+      "file_count": 10,
+      "dependencies": [],
+      "integration_method": "Reference for Phases 16-18 contract design (adapt, do not copy verbatim).",
+      "files": ["ecc-install-config.schema.json", "hooks.schema.json", "install-components.schema.json", "install-modules.schema.json", "install-profiles.schema.json", "install-state.schema.json", "package-manager.schema.json", "plugin.schema.json", "provenance.schema.json", "state-store.schema.json"]
+    },
+    {
+      "id": "docs",
+      "source_paths": ["docs/<11 files>", "docs/architecture/", "AGENTS.md -> docs/ECC-AGENTS.md"],
+      "destination": "ecc/docs/",
+      "kind": "markdown",
+      "disposition": "EXTRACT",
+      "reason": "Architecture, session-adapter contract, observability, skill/command governance docs.",
+      "file_count": 21,
+      "dependencies": [],
+      "integration_method": "Reference documentation.",
+      "files": ["ECC-2.0-REFERENCE-ARCHITECTURE.md", "ECC-2.0-GA-ROADMAP.md", "SESSION-ADAPTER-CONTRACT.md", "COMMAND-AGENT-MAP.md", "COMMAND-REGISTRY.json", "PLAN-PRD-PATTERN.md", "SKILL-DEVELOPMENT-GUIDE.md", "SKILL-PLACEMENT-POLICY.md", "SELECTIVE-INSTALL-ARCHITECTURE.md", "continuous-learning-v2-spec.md", "MCP-CONNECTOR-POLICY.md", "ECC-AGENTS.md", "architecture/*.md"]
+    },
+    {
+      "id": "research",
+      "source_paths": ["research/ecc2-codebase-analysis.md"],
+      "destination": "ecc/research/",
+      "kind": "markdown",
+      "disposition": "EXTRACT",
+      "reason": "ECC's own ecc2 analysis (architecture, gaps, dependency health).",
+      "file_count": 1,
+      "dependencies": [],
+      "integration_method": "Reference; NOTE: partially stale (reports ecc2 smaller than it is now)."
+    },
+    {
+      "id": "license",
+      "source_paths": ["LICENSE"],
+      "destination": "ecc/LICENSE",
+      "kind": "license",
+      "disposition": "EXTRACT",
+      "reason": "Preserve ECC's MIT license and attribution.",
+      "file_count": 1,
+      "dependencies": [],
+      "integration_method": "Attribution only."
+    }
+  ],
+  "deferred": [
+    {
+      "source_paths": ["src/llm/"],
+      "reason": "Decision A: PurpleGuard already owns a provider layer; adopt later through ecc/bridge if needed.",
+      "file_count": 20,
+      "dependencies_if_adopted": ["openai", "anthropic"]
+    },
+    {
+      "source_paths": ["ecc2/src/tui/"],
+      "reason": "General-purpose interaction: PurpleGuard has the Next.js frontend; TUI kept only because the crate compiles as a unit."
+    }
+  ],
+  "excluded": [
+    {"source_paths": ["docs/<translations and non-selected>"], "reason": "1,475+ unrelated/translated docs."},
+    {"source_paths": ["rules/<other languages>"], "reason": "Not relevant to PurpleGuard's Python/web stack."},
+    {"source_paths": ["scripts/", ".cursor/", ".opencode/", ".codebuddy/", ".kiro/", ".trae/", "hooks/", "mcp-configs/", "plugins/"], "reason": "Claude-harness JS tooling; not PurpleGuard's runtime."},
+    {"source_paths": ["manifests/", "config/", "contexts/", "examples/", "assets/", "scaffolds/, legacy-command-shims/"], "reason": "Install/distribution and presentation material; not code."},
+    {"source_paths": ["ecc_dashboard.py"], "reason": "Tkinter GUI; duplicates the frontend."},
+    {"source_paths": ["skills/<~230 unselected>", "agents/<56 other>", "commands/<~51 other>"], "reason": "Outside the selected capability set."},
+    {"source_paths": ["(any .git, secrets, .env, venv, node_modules, caches, build output)"], "reason": "Excluded by using git archive (tracked files only) — verified absent."}
+  ],
+  "blocked": [
+    {
+      "item": "Agent-Reach",
+      "reason": "No Agent-Reach directory or references exist in the audited ECC commit; cannot be sourced or verified.",
+      "action": "Phase 11 cannot proceed without a source. Not fabricated."
+    },
+    {
+      "item": "ECC repository push",
+      "reason": "git push to learnkit-tech/ECC denied (HTTP 403) for freebuff-web[bot].",
+      "action": "Reconnect the repo / grant the Freebuff GitHub App access. Upstream ECC was not modified; this affects only publishing the local ECC commit."
+    }
+  ]
+}

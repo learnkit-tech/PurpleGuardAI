@@ -31,6 +31,13 @@ const nextConfig: NextConfig = {
         destination: "http://127.0.0.1:8000/agent/:path*",
       },
       {
+        // Security Agent Workforce — real Hacker backend.
+        // Same-origin rewrite so the UI reads the persisted
+        // canonical findings and Developer handoff state.
+        source: "/workforce/:path*",
+        destination: "http://127.0.0.1:8000/workforce/:path*",
+      },
+      {
         source: "/reset",
         destination: "http://127.0.0.1:8000/reset",
       },

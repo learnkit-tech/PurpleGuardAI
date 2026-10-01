@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const API_URL =
   process.env.NEXT_PUBLIC_PURPLEGUARD_API || "";
@@ -124,14 +124,17 @@ type SecureResult = {
 };
 
 const navigation = [
-  { name: "Overview", icon: "⌂" },
-  { name: "Scanner", icon: "⌕" },
-  { name: "Attack", icon: "⚔" },
-  { name: "Findings", icon: "!" },
-  { name: "AI Engineer", icon: "✦" },
-  { name: "Changes", icon: "↗" },
-  { name: "Verification", icon: "✓" },
-  { name: "History", icon: "◷" },
+  { name: "Overview", icon: "⌂", group: "Console" },
+  { name: "Hacker", icon: "◈", group: "Project" },
+  { name: "Developer", icon: "⌘", group: "Project" },
+  { name: "Scanner", icon: "⌕", group: "Project" },
+  { name: "AI Engineer", icon: "✦", group: "Project" },
+  { name: "ECC / Security Workforce", icon: "⬡", group: "Project" },
+  { name: "Findings", icon: "!", group: "Workflow" },
+  { name: "Attack", icon: "⚔", group: "Workflow" },
+  { name: "Changes", icon: "↗", group: "Workflow" },
+  { name: "Verification", icon: "✓", group: "Workflow" },
+  { name: "History", icon: "◷", group: "Workflow" },
 ];
 
 function severityClass(severity: string) {
@@ -197,6 +200,7 @@ function normalizeFinding(raw: any): Finding {
 }
 
 export default function Home() {
+  const [view, setView] = useState<"landing" | "console">("landing");
   const [active, setActive] = useState("Overview");
 
   const [connected, setConnected] = useState(false);
@@ -220,6 +224,25 @@ export default function Home() {
 
   const [selectedAttackPath, setSelectedAttackPath] =
     useState<string | null>(null);
+
+  const [backendStatus, setBackendStatus] = useState<
+    "checking" | "online" | "offline"
+  >("checking");
+
+  async function checkBackend() {
+    try {
+      const response = await fetch(`${API_URL}/status`);
+      setBackendStatus(response.ok ? "online" : "offline");
+    } catch {
+      setBackendStatus("offline");
+    }
+  }
+
+  useEffect(() => {
+    // Real backend health check against the live API.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    checkBackend();
+  }, []);
 
   async function runScan() {
     if (scanning || securing) {
@@ -408,6 +431,10 @@ export default function Home() {
             ? "Moderate risk"
             : "Low risk";
 
+  if (view === "landing") {
+    return <LandingScreen onEnter={() => setView("console")} />;
+  }
+
   return (
     <main className="min-h-screen bg-[#08070c] text-white">
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#08070c]/90 backdrop-blur-xl">
@@ -428,35 +455,73 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="hidden items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/5 px-3 py-1.5 text-xs text-emerald-300 sm:flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            {connected ? "Engine connected" : "Engine ready"}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setView("landing")}
+              className="hidden rounded-full border border-white/10 px-3 py-1.5 text-xs text-white/50 transition hover:bg-white/5 hover:text-white sm:block"
+            >
+              ← Landing
+            </button>
+
+            <div
+              className={`hidden items-center gap-2 rounded-full border px-3 py-1.5 text-xs sm:flex ${
+                backendStatus === "offline"
+                  ? "border-red-400/20 bg-red-400/5 text-red-300"
+                  : backendStatus === "online"
+                    ? "border-emerald-400/20 bg-emerald-400/5 text-emerald-300"
+                    : "border-white/10 bg-white/5 text-white/50"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  backendStatus === "offline"
+                    ? "bg-red-400"
+                    : backendStatus === "online"
+                      ? "bg-emerald-400"
+                      : "bg-white/40"
+                }`}
+              />
+              {backendStatus === "offline"
+                ? "Engine offline"
+                : backendStatus === "online"
+                  ? connected
+                    ? "Engine connected"
+                    : "Engine online"
+                  : "Connecting…"}
+            </div>
           </div>
         </div>
       </header>
 
       <div className="mx-auto flex max-w-7xl">
         <aside className="hidden w-60 shrink-0 border-r border-white/10 px-4 py-6 lg:block">
-          <div className="mb-4 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/30">
-            Security workspace
-          </div>
-
           <nav className="space-y-1">
-            {navigation.map((item) => (
-              <button
-                key={item.name}
-                onClick={() => setActive(item.name)}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
-                  active === item.name
-                    ? "bg-purple-500/15 text-white ring-1 ring-purple-500/20"
-                    : "text-white/50 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <span className="flex w-5 justify-center">
-                  {item.icon}
-                </span>
-                {item.name}
-              </button>
+            {navigation.map((item, index) => (
+              <div key={item.name}>
+                {(index === 0 || navigation[index - 1].group !== item.group) && (
+                  <div
+                    className={`px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/30 ${
+                      index === 0 ? "mb-2" : "mb-2 mt-5"
+                    }`}
+                  >
+                    {item.group}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setActive(item.name)}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
+                    active === item.name
+                      ? "bg-purple-500/15 text-white ring-1 ring-purple-500/20"
+                      : "text-white/50 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  <span className="flex w-5 justify-center">
+                    {item.icon}
+                  </span>
+                  {item.name}
+                </button>
+              </div>
             ))}
           </nav>
 
@@ -729,14 +794,15 @@ export default function Home() {
 
           {active === "Scanner" && (
             <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-semibold">
                     Static scanner
                   </h2>
 
                   <p className="mt-1 text-sm text-white/40">
-                    Run the existing PurpleGuard static analysis engine.
+                    Runs the real PurpleGuard static analysis engine
+                    (PG001–PG012) against the current target.
                   </p>
                 </div>
 
@@ -749,9 +815,64 @@ export default function Home() {
                 </button>
               </div>
 
-              <div className="mt-6 text-sm text-white/50">
-                {findings.length} findings currently loaded.
+              {scanError && (
+                <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/5 px-4 py-3 text-xs text-red-300">
+                  {scanError}
+                </div>
+              )}
+
+              <div className="mt-6 flex items-center gap-2 text-xs text-white/40">
+                <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
+                {findings.length} finding(s) returned by the engine
+                {lastScanTarget ? ` · ${lastScanTarget}` : ""}
               </div>
+
+              {findings.length === 0 ? (
+                <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-6 text-sm text-white/40">
+                  No findings loaded. Point the target at an authorized
+                  project and press “Run static scan”.
+                </div>
+              ) : (
+                <div className="mt-5 space-y-3">
+                  {findings.map((finding) => (
+                    <button
+                      key={`${finding.id}-${finding.file}-${finding.line}`}
+                      onClick={() => setSelectedFinding(finding)}
+                      className="w-full rounded-2xl border border-white/10 p-4 text-left transition hover:bg-white/5"
+                    >
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${severityClass(
+                            finding.severity
+                          )}`}
+                        >
+                          {finding.severity}
+                        </span>
+
+                        <span className="text-xs text-purple-300">
+                          {finding.id}
+                        </span>
+
+                        <span className="text-sm font-semibold">
+                          {displayFile(finding.file)}:{finding.line}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 text-xs text-white/45">
+                        {finding.title ||
+                          finding.name ||
+                          finding.category}
+                      </div>
+
+                      {finding.code && (
+                        <code className="mt-2 block truncate rounded-lg bg-black/40 p-2 font-mono text-[11px] text-purple-200">
+                          {finding.code}
+                        </code>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1018,6 +1139,18 @@ export default function Home() {
             </div>
           )}
 
+          {active === "Hacker" && (
+            <WorkforcePanel target={target} apiUrl={API_URL} />
+          )}
+
+          {active === "Developer" && (
+            <DeveloperPanel target={target} apiUrl={API_URL} />
+          )}
+
+          {active === "ECC / Security Workforce" && (
+            <EccWorkforcePanel apiUrl={API_URL} />
+          )}
+
           {active === "Findings" && (
             <FindingsPanel
               findings={findings}
@@ -1045,32 +1178,7 @@ export default function Home() {
           )}
 
           {active === "History" && (
-            <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-8">
-              <h2 className="text-xl font-semibold">
-                Security history
-              </h2>
-
-              <p className="mt-2 text-sm text-white/35">
-                Persistent security-run history will be connected after
-                the core workflow is complete.
-              </p>
-
-              {secureResult && (
-                <div className="mt-6 rounded-2xl border border-white/10 p-4">
-                  <div className="text-xs text-white/30">
-                    CURRENT RUN
-                  </div>
-
-                  <div className="mt-2 text-sm">
-                    {secureResult.status}
-                  </div>
-
-                  <div className="mt-1 text-xs text-white/35">
-                    {secureResult.project}
-                  </div>
-                </div>
-              )}
-            </div>
+            <HistoryPanel apiUrl={API_URL} result={secureResult} />
           )}
 
           <footer className="mt-12 border-t border-white/10 py-6 text-xs text-white/25">
@@ -3269,6 +3377,1472 @@ function VerificationCard({
         {passed === undefined
           ? "NOT RUN"
           : boolLabel(passed)}
+      </div>
+    </div>
+  );
+}
+
+// ─── Workforce (real Hacker backend) ─────────────────────────
+
+type WorkforceCapability = {
+  agent_id: string;
+  operation: string;
+  engine: string;
+  executable: boolean;
+  state: string;
+  unavailable_reason: string;
+};
+
+type WorkforceEvidence = {
+  what_tested?: string;
+  where_tested?: string;
+  what_happened?: string;
+};
+
+type WorkforceSource = {
+  agent_id?: string;
+  task_id?: string;
+  correlation_id?: string;
+};
+
+type CanonicalFinding = {
+  fingerprint: string;
+  rule_id?: string;
+  name?: string;
+  severity?: string;
+  file?: string;
+  line?: number;
+  code?: string;
+  validation_state?: string;
+  remediation_state?: string;
+  verification_state?: string;
+  sources?: WorkforceSource[];
+  evidence?: WorkforceEvidence[];
+};
+
+type ParticipatingAgent = {
+  agent_id: string;
+  role: string;
+  status: string;
+  engine: string;
+  finding_count: number;
+  evidence_count: number;
+  confidence: number;
+};
+
+type Assessment = {
+  target?: string;
+  participating_agents: ParticipatingAgent[];
+  canonical_findings: CanonicalFinding[];
+  corroboration: {
+    agent_count: number;
+    distinct_engines: string[];
+    corroborated_count: number;
+    single_agent_count: number;
+    independent_corroboration: boolean;
+  };
+};
+
+type HandoffItem = {
+  fingerprint: string;
+  rule_id?: string;
+  severity?: string;
+  file?: string;
+  line?: number;
+  validation_state?: string;
+  sources?: WorkforceSource[];
+  evidence?: WorkforceEvidence[];
+  stage?: string;
+  verification?: { verified?: boolean; status?: string } | null;
+};
+
+function workforceStateClass(state: string) {
+  if (state === "VERIFIED") return "bg-emerald-400/10 text-emerald-300";
+  if (state === "CORROBORATED") return "bg-emerald-400/10 text-emerald-300";
+  if (state === "READY_FOR_DEVELOPER") return "bg-purple-400/10 text-purple-300";
+  if (state === "REQUIRES_VALIDATION") return "bg-amber-400/10 text-amber-300";
+  if (state === "REMEDIATION_PENDING") return "bg-orange-400/10 text-orange-300";
+  if (state === "RETESTING") return "bg-cyan-400/10 text-cyan-300";
+  if (state === "VALIDATING") return "bg-indigo-400/10 text-indigo-300";
+  if (state === "DISCOVERED") return "bg-sky-400/10 text-sky-300";
+  if (state === "FAILED") return "bg-red-400/10 text-red-300";
+  return "bg-white/5 text-white/40";
+}
+
+function canonicalState(
+  finding: CanonicalFinding,
+  pendingByFingerprint: Record<string, HandoffItem>
+): string {
+  const item = pendingByFingerprint[finding.fingerprint];
+
+  if (item) {
+    if (item.stage === "verified") return "VERIFIED";
+    if (item.stage === "awaiting_approval") return "READY_FOR_DEVELOPER";
+    if (item.stage === "remediated_not_verified") return "RETESTING";
+    if (item.stage === "remediation_unavailable") return "REMEDIATION_PENDING";
+    if (item.stage === "not_verified") return "FAILED";
+    return "REMEDIATION_PENDING";
+  }
+
+  if (finding.validation_state === "corroborated") return "CORROBORATED";
+  return "REQUIRES_VALIDATION";
+}
+
+function WorkforcePanel({
+  target,
+  apiUrl,
+}: {
+  target: string;
+  apiUrl: string;
+}) {
+  const [capabilities, setCapabilities] = useState<WorkforceCapability[]>([]);
+  const [findings, setFindings] = useState<CanonicalFinding[]>([]);
+  const [pending, setPending] = useState<HandoffItem[]>([]);
+  const [assessment, setAssessment] = useState<Assessment | null>(null);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  async function refresh() {
+    try {
+      const [caps, found, handoff] = await Promise.all([
+        fetch(`${apiUrl}/workforce/capabilities`),
+        fetch(`${apiUrl}/workforce/findings`),
+        fetch(`${apiUrl}/workforce/handoff`),
+      ]);
+
+      const capsJson = await caps.json();
+      const foundJson = await found.json();
+      const handoffJson = await handoff.json();
+
+      setCapabilities(capsJson.capabilities || []);
+      setFindings(foundJson.findings || []);
+      setPending(handoffJson.pending || []);
+    } catch {
+      setError(
+        "Could not reach the PurpleGuard backend. Is the API running?"
+      );
+    }
+  }
+
+  useEffect(() => {
+    // Loads from the backend after the effect returns; the state
+    // updates happen inside the awaited fetch, not synchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function runAssessment() {
+    if (!target.trim() || busy) return;
+
+    setBusy("assess");
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await fetch(`${apiUrl}/workforce/assess`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Assessment failed.");
+        return;
+      }
+
+      setAssessment(data.assessment || null);
+      setNotice(
+        "Assessment complete. Findings were produced by the real engines and correlated."
+      );
+      await refresh();
+    } catch {
+      setError("Assessment request failed.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function sendToDeveloper() {
+    if (!target.trim() || busy) return;
+
+    setBusy("handoff");
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await fetch(`${apiUrl}/workforce/handoff`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Handoff failed.");
+        return;
+      }
+
+      setNotice(
+        `Sent ${data.delivered ?? 0} canonical finding(s) to the developer. Approval is required before any source change.`
+      );
+      await refresh();
+    } catch {
+      setError("Handoff request failed.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function approve(fingerprint: string) {
+    if (busy) return;
+
+    setBusy(`approve:${fingerprint}`);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await fetch(`${apiUrl}/workforce/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fingerprint, approve: true, target }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Approval failed.");
+        return;
+      }
+
+      const verdict = data.verification?.verified
+        ? "remediation applied and VERIFIED by a genuine re-test"
+        : "remediation did not pass the re-test";
+
+      setNotice(`Result: ${data.status} — ${verdict}.`);
+      await refresh();
+    } catch {
+      setError("Approval request failed.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const pendingByFingerprint: Record<string, HandoffItem> = {};
+  for (const item of pending) {
+    pendingByFingerprint[item.fingerprint] = item;
+  }
+
+  const allCanonical: CanonicalFinding[] = assessment
+    ? assessment.canonical_findings
+    : findings;
+
+  const executable = capabilities.filter((c) => c.executable).length;
+  const unavailable = capabilities.length - executable;
+
+  const running = busy === "assess";
+
+  const pipeline = [
+    { label: "DISCOVERED", active: running || allCanonical.length > 0 },
+    { label: "VALIDATING", active: running || Boolean(assessment) },
+    {
+      label: "CORROBORATED",
+      active: Boolean(
+        assessment && assessment.corroboration.independent_corroboration
+      ),
+    },
+    { label: "READY_FOR_DEVELOPER", active: pending.length > 0 },
+    {
+      label: "VERIFIED",
+      active: pending.some((item) => item.stage === "verified"),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-purple-500/20 bg-purple-500/5 p-6">
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-purple-300">
+          Security Agent Workforce
+        </div>
+
+        <h2 className="mt-2 text-2xl font-semibold">
+          Real agents. Real engines. Real evidence.
+        </h2>
+
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-white/40">
+          A discovery agent and an independent validation agent run the
+          real PurpleGuard engines against your authorized target. A
+          finding is only corroborated when two distinct agents produced
+          evidence for it. Every value below comes from the persisted
+          canonical finding — nothing is simulated.
+        </p>
+
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <button
+            onClick={runAssessment}
+            disabled={running || Boolean(busy)}
+            className="rounded-xl bg-purple-500/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-purple-400 disabled:opacity-40"
+          >
+            {running ? "Running agents…" : "Run workforce assessment"}
+          </button>
+
+          <button
+            onClick={sendToDeveloper}
+            disabled={Boolean(busy) || pending.length === 0}
+            className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-white/80 transition hover:bg-white/5 disabled:opacity-40"
+          >
+            {busy === "handoff" ? "Sending…" : "Send to developer"}
+          </button>
+
+          <button
+            onClick={refresh}
+            disabled={Boolean(busy)}
+            className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:bg-white/5 disabled:opacity-40"
+          >
+            Refresh
+          </button>
+
+          <span className="text-xs text-white/35">
+            target: <span className="text-white/60">{target || "—"}</span>
+          </span>
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          {pipeline.map((stage) => (
+            <span
+              key={stage.label}
+              className={`rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide ${
+                stage.active
+                  ? workforceStateClass(stage.label)
+                  : "bg-white/5 text-white/25"
+              }`}
+            >
+              {stage.label}
+            </span>
+          ))}
+        </div>
+
+        {error && (
+          <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/5 p-3 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        {notice && (
+          <div className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-3 text-sm text-emerald-200">
+            {notice}
+          </div>
+        )}
+
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-2xl border border-white/10 p-4">
+            <div className="text-xs uppercase tracking-wider text-white/30">
+              Executable
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-emerald-300">
+              {executable}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 p-4">
+            <div className="text-xs uppercase tracking-wider text-white/30">
+              Unavailable
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-white/50">
+              {unavailable}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 p-4">
+            <div className="text-xs uppercase tracking-wider text-white/30">
+              Canonical findings
+            </div>
+            <div className="mt-2 text-2xl font-semibold">
+              {allCanonical.length}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 p-4">
+            <div className="text-xs uppercase tracking-wider text-white/30">
+              Pending developer
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-purple-300">
+              {pending.length}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {assessment && (
+        <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+          <h3 className="text-lg font-semibold">Agent execution</h3>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {assessment.participating_agents.map((agent) => (
+              <div
+                key={agent.agent_id}
+                className="rounded-2xl border border-white/10 p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold">
+                    {agent.agent_id}
+                  </div>
+                  <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white/50">
+                    {agent.status}
+                  </span>
+                </div>
+
+                <div className="mt-2 text-xs text-white/40">
+                  role: {agent.role}
+                </div>
+
+                <div className="mt-1 break-all text-[11px] text-white/30">
+                  engine: {agent.engine}
+                </div>
+
+                <div className="mt-3 flex gap-4 text-xs text-white/50">
+                  <span>findings: {agent.finding_count}</span>
+                  <span>evidence: {agent.evidence_count}</span>
+                  <span>confidence: {agent.confidence}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-white/10 p-4 text-sm">
+            <div className="text-xs uppercase tracking-wider text-white/30">
+              Independent corroboration
+            </div>
+
+            <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-white/60">
+              <span>agents: {assessment.corroboration.agent_count}</span>
+              <span>
+                corroborated: {assessment.corroboration.corroborated_count}
+              </span>
+              <span>single-agent: {assessment.corroboration.single_agent_count}</span>
+              <span>
+                independent:{" "}
+                {assessment.corroboration.independent_corroboration
+                  ? "YES"
+                  : "NO"}
+              </span>
+            </div>
+
+            <div className="mt-2 break-all text-[11px] text-white/30">
+              distinct engines:{" "}
+              {assessment.corroboration.distinct_engines.join(", ")}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+        <h3 className="text-lg font-semibold">Canonical findings</h3>
+
+        <p className="mt-1 text-sm text-white/35">
+          Deduplicated findings with the evidence and provenance of every
+          agent that produced them.
+        </p>
+
+        {allCanonical.length === 0 ? (
+          <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-white/40">
+            No canonical findings yet. Run a workforce assessment against an
+            authorized target.
+          </div>
+        ) : (
+          <div className="mt-5 space-y-4">
+            {allCanonical.map((finding) => {
+              const state = canonicalState(finding, pendingByFingerprint);
+              const item = pendingByFingerprint[finding.fingerprint];
+
+              return (
+                <div
+                  key={finding.fingerprint}
+                  className="rounded-2xl border border-white/10 p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${severityClass(
+                          finding.severity || "LOW"
+                        )}`}
+                      >
+                        {finding.severity}
+                      </span>
+
+                      <span className="text-sm font-semibold">
+                        [{finding.rule_id}] {finding.name || "Finding"}
+                      </span>
+                    </div>
+
+                    <span
+                      className={`rounded-full px-3 py-1 text-[11px] font-semibold ${workforceStateClass(
+                        state
+                      )}`}
+                    >
+                      {state}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 text-xs text-white/45">
+                    {displayFile(finding.file || "")}:{finding.line}{" "}
+                    {finding.code ? `— ${finding.code}` : ""}
+                  </div>
+
+                  <div className="mt-3 text-[11px] uppercase tracking-wider text-white/30">
+                    reported by
+                  </div>
+
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {(finding.sources || []).map((source, index) => (
+                      <span
+                        key={`${source.agent_id}-${index}`}
+                        className="rounded-md bg-white/5 px-2 py-0.5 text-[11px] text-white/60"
+                      >
+                        {source.agent_id}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 text-[11px] uppercase tracking-wider text-white/30">
+                    evidence ({finding.evidence?.length ?? 0})
+                  </div>
+
+                  <div className="mt-2 space-y-2">
+                    {(finding.evidence || []).map((ev, index) => (
+                      <div
+                        key={index}
+                        className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-white/50"
+                      >
+                        <div className="text-white/70">
+                          {ev.where_tested || "—"}
+                        </div>
+                        <div className="mt-1">{ev.what_tested}</div>
+                        <div className="mt-1 text-white/40">
+                          {ev.what_happened}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {item && item.stage === "awaiting_approval" && (
+                    <div className="mt-4 flex items-center justify-between rounded-xl border border-purple-500/20 bg-purple-500/5 p-3">
+                      <div className="text-xs text-purple-200">
+                        Ready for the developer. Approval required before any
+                        source change.
+                      </div>
+
+                      <button
+                        onClick={() => approve(finding.fingerprint)}
+                        disabled={Boolean(busy)}
+                        className="rounded-lg bg-purple-500/90 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-purple-400 disabled:opacity-40"
+                      >
+                        {busy === `approve:${finding.fingerprint}`
+                          ? "Remediating…"
+                          : "Approve & remediate"}
+                      </button>
+                    </div>
+                  )}
+
+                  {item?.verification && (
+                    <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-white/50">
+                      re-test: {item.verification.verified ? "VERIFIED" : item.verification.status}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+        <h3 className="text-lg font-semibold">Capability states</h3>
+
+        <p className="mt-1 text-sm text-white/35">
+          What actually executes — and what is honestly unavailable.
+        </p>
+
+        <div className="mt-5 grid gap-2 md:grid-cols-2">
+          {capabilities.map((cap) => (
+            <div
+              key={cap.agent_id}
+              className="flex items-start justify-between gap-3 rounded-xl border border-white/10 p-3"
+            >
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">{cap.agent_id}</div>
+
+                <div className="mt-1 break-all text-[11px] text-white/30">
+                  {cap.executable ? cap.engine : cap.unavailable_reason}
+                </div>
+              </div>
+
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${workforceStateClass(
+                  cap.state
+                )}`}
+              >
+                {cap.state}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Landing (product experience) ─────────────────────────
+
+function LandingScreen({ onEnter }: { onEnter: () => void }) {
+  const features = [
+    {
+      icon: "▤",
+      title: "Real static scanner",
+      body: "PG001–PG012 run against your authorized source. Findings are read from the engine, never mocked.",
+    },
+    {
+      icon: "◈",
+      title: "Red-team Hacker engine",
+      body: "The Python security analyzer builds attack paths and independently corroborates them against a second engine.",
+    },
+    {
+      icon: "⬡",
+      title: "Security workforce",
+      body: "Multi-agent execution with correlation, provenance and canonical findings that persist across runs.",
+    },
+    {
+      icon: "⌘",
+      title: "Approval-gated remediation",
+      body: "Nothing touches your source until a human approves. Then a provably safe patch is applied.",
+    },
+    {
+      icon: "✓",
+      title: "Genuine re-test",
+      body: "Verification comes from a fresh scan showing the rule no longer fires — not from the fact a patch was written.",
+    },
+    {
+      icon: "◷",
+      title: "Honest availability",
+      body: "13 engines execute. Capabilities without a real primitive are reported UNAVAILABLE with the exact reason.",
+    },
+  ];
+
+  const pipeline = [
+    "Discover",
+    "Validate",
+    "Corroborate",
+    "Publish",
+    "Handoff",
+    "Approve",
+    "Remediate",
+    "Re-test",
+    "Verify",
+  ];
+
+  return (
+    <main className="min-h-screen bg-[#08070c] text-white">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-40 left-1/2 h-[36rem] w-[36rem] -translate-x-1/2 rounded-full bg-purple-600/20 blur-[140px]" />
+        <div className="absolute bottom-0 right-0 h-[28rem] w-[28rem] rounded-full bg-indigo-600/10 blur-[120px]" />
+      </div>
+
+      <header className="relative mx-auto flex max-w-7xl items-center justify-between px-4 py-6 md:px-8">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500 font-black">
+            P
+          </div>
+
+          <div>
+            <div className="font-semibold tracking-tight">PurpleGuard</div>
+            <div className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+              AI Security Engineer
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={onEnter}
+          className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-white/80 transition hover:bg-white/5"
+        >
+          Enter console
+        </button>
+      </header>
+
+      <section className="relative mx-auto max-w-7xl px-4 pb-24 pt-8 md:px-8 md:pt-16">
+        <div className="inline-flex items-center gap-2 rounded-full border border-purple-500/25 bg-purple-500/10 px-3 py-1.5 text-xs text-purple-200">
+          <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
+          Real engines · real evidence · honest availability
+        </div>
+
+        <h1 className="mt-6 max-w-4xl text-4xl font-semibold leading-[1.05] tracking-tight md:text-6xl">
+          Offensive security that proves the risk — and then proves the fix.
+        </h1>
+
+        <p className="mt-6 max-w-2xl text-base leading-7 text-white/50">
+          PurpleGuard pairs a real static scanner with a red-team Hacker
+          engine, multi-agent corroboration, approval-gated remediation, and a
+          genuine re-test. Every finding you see comes from a real engine run.
+        </p>
+
+        <div className="mt-8 flex flex-wrap gap-3">
+          <button
+            onClick={onEnter}
+            className="rounded-xl bg-purple-500 px-6 py-3 text-sm font-semibold shadow-lg shadow-purple-950/40 transition hover:bg-purple-400"
+          >
+            Launch the console
+          </button>
+
+          <button
+            onClick={onEnter}
+            className="rounded-xl border border-white/15 px-6 py-3 text-sm font-semibold text-white/80 transition hover:bg-white/5"
+          >
+            Explore the Hacker engine
+          </button>
+        </div>
+
+        <div className="mt-16 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+            <div className="text-3xl font-semibold text-emerald-300">13</div>
+            <div className="mt-1 text-xs uppercase tracking-wider text-white/35">
+              Executable engines
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+            <div className="text-3xl font-semibold text-white/60">7</div>
+            <div className="mt-1 text-xs uppercase tracking-wider text-white/35">
+              Honestly unavailable
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+            <div className="text-3xl font-semibold text-purple-300">1</div>
+            <div className="mt-1 text-xs uppercase tracking-wider text-white/35">
+              Unified real backend
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-16 grid gap-4 md:grid-cols-3">
+          {features.map((feature) => (
+            <div
+              key={feature.title}
+              className="rounded-3xl border border-white/10 bg-white/[0.025] p-6 transition hover:border-purple-500/25 hover:bg-white/[0.04]"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/15 text-lg text-purple-200">
+                {feature.icon}
+              </div>
+
+              <div className="mt-4 text-base font-semibold">
+                {feature.title}
+              </div>
+
+              <p className="mt-2 text-sm leading-6 text-white/45">
+                {feature.body}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-16 rounded-3xl border border-white/10 bg-white/[0.025] p-6 md:p-8">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-purple-300">
+            How it works
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            {pipeline.map((step, index) => (
+              <div key={step} className="flex items-center gap-2">
+                <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs text-white/70">
+                  {step}
+                </span>
+
+                {index < pipeline.length - 1 && (
+                  <span className="text-white/20">→</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <footer className="mt-16 border-t border-white/10 pt-6 text-xs text-white/35">
+          Authorized local targets only. PurpleGuard sends harmless controlled
+          payloads and never performs destructive actions or external network
+          access.
+        </footer>
+      </section>
+    </main>
+  );
+}
+
+// ─── Developer (real handoff → approval → remediation → re-test) ───
+
+function DeveloperPanel({
+  target,
+  apiUrl,
+}: {
+  target: string;
+  apiUrl: string;
+}) {
+  const [pending, setPending] = useState<HandoffItem[]>([]);
+  const [findings, setFindings] = useState<CanonicalFinding[]>([]);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  async function refresh() {
+    try {
+      const [handoff, found] = await Promise.all([
+        fetch(`${apiUrl}/workforce/handoff`),
+        fetch(`${apiUrl}/workforce/findings`),
+      ]);
+
+      const handoffJson = await handoff.json();
+      const foundJson = await found.json();
+
+      setPending(handoffJson.pending || []);
+      setFindings(foundJson.findings || []);
+    } catch {
+      setError(
+        "Could not reach the PurpleGuard backend. Is the API running?"
+      );
+    }
+  }
+
+  useEffect(() => {
+    // Loads from the backend after the effect returns; the state
+    // updates happen inside the awaited fetch, not synchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function send() {
+    if (busy || !target.trim()) return;
+
+    setBusy("send");
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await fetch(`${apiUrl}/workforce/handoff`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Handoff failed.");
+        return;
+      }
+
+      setNotice(
+        `Delivered ${data.delivered ?? 0} finding(s) to the developer inbox. Approval is required before any source change.`
+      );
+      await refresh();
+    } catch {
+      setError("Handoff request failed.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function approve(fingerprint: string) {
+    if (busy) return;
+
+    setBusy(`approve:${fingerprint}`);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await fetch(`${apiUrl}/workforce/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fingerprint, approve: true, target }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Approval failed.");
+        return;
+      }
+
+      const verdict = data.verification?.verified
+        ? "remediation applied and VERIFIED by a genuine re-test"
+        : "remediation did not pass the re-test";
+
+      setNotice(`Result: ${data.status} — ${verdict}.`);
+      await refresh();
+    } catch {
+      setError("Approval request failed.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const stages = [
+    "Finding",
+    "Evidence",
+    "Approval",
+    "Remediation",
+    "Re-test",
+    "Verification",
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-purple-500/20 bg-purple-500/5 p-6">
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-purple-300">
+          Developer workflow
+        </div>
+
+        <h2 className="mt-2 text-2xl font-semibold">
+          Finding → approval → remediation → re-test → verification
+        </h2>
+
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-white/40">
+          The developer inbox holds the real canonical findings produced by the
+          security workforce. Nothing is written to source until an explicit
+          approval, and a finding is only verified when a genuine re-test shows
+          the original rule no longer fires.
+        </p>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          {stages.map((stage) => (
+            <span
+              key={stage}
+              className="rounded-full bg-white/5 px-3 py-1 text-[11px] font-semibold tracking-wide text-white/50"
+            >
+              {stage}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <button
+            onClick={send}
+            disabled={Boolean(busy) || !target.trim()}
+            className="rounded-xl bg-purple-500/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-purple-400 disabled:opacity-40"
+          >
+            {busy === "send" ? "Sending…" : "Send findings to developer"}
+          </button>
+
+          <button
+            onClick={refresh}
+            disabled={Boolean(busy)}
+            className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:bg-white/5 disabled:opacity-40"
+          >
+            Refresh
+          </button>
+
+          <span className="text-xs text-white/35">
+            target: <span className="text-white/60">{target || "—"}</span>
+          </span>
+        </div>
+
+        {error && (
+          <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/5 p-3 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        {notice && (
+          <div className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-3 text-sm text-emerald-200">
+            {notice}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+        <h3 className="text-lg font-semibold">Developer inbox</h3>
+
+        <p className="mt-1 text-sm text-white/35">
+          {pending.length} finding(s) awaiting approval. Evidence is attached
+          from the canonical finding.
+        </p>
+
+        {pending.length === 0 ? (
+          <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-white/40">
+            The inbox is empty. Send findings from the Hacker panel or use the
+            button above.
+          </div>
+        ) : (
+          <div className="mt-5 space-y-4">
+            {pending.map((item) => (
+              <div
+                key={item.fingerprint}
+                className="rounded-2xl border border-white/10 p-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${severityClass(
+                        item.severity || "LOW"
+                      )}`}
+                    >
+                      {item.severity}
+                    </span>
+
+                    <span className="text-sm font-semibold">
+                      [{item.rule_id}] {displayFile(item.file || "")}:
+                      {item.line}
+                    </span>
+                  </div>
+
+                  <span className="rounded-full bg-purple-400/10 px-3 py-1 text-[11px] font-semibold text-purple-300">
+                    AWAITING_APPROVAL
+                  </span>
+                </div>
+
+                <div className="mt-3 text-[11px] uppercase tracking-wider text-white/30">
+                  evidence ({(item.evidence || []).length})
+                </div>
+
+                <div className="mt-2 space-y-2">
+                  {(item.evidence || []).map((ev, index) => (
+                    <div
+                      key={index}
+                      className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-white/50"
+                    >
+                      <div className="text-white/70">
+                        {ev.where_tested || "—"}
+                      </div>
+                      <div className="mt-1">{ev.what_tested}</div>
+                      <div className="mt-1 text-white/40">
+                        {ev.what_happened}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-purple-500/20 bg-purple-500/5 p-3">
+                  <div className="text-xs text-purple-200">
+                    Approval required before any source change.
+                  </div>
+
+                  <button
+                    onClick={() => approve(item.fingerprint)}
+                    disabled={Boolean(busy)}
+                    className="shrink-0 rounded-lg bg-purple-500/90 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-purple-400 disabled:opacity-40"
+                  >
+                    {busy === `approve:${item.fingerprint}`
+                      ? "Remediating…"
+                      : "Approve & remediate"}
+                  </button>
+                </div>
+
+                {item.verification && (
+                  <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-white/50">
+                    re-test:{" "}
+                    {item.verification.verified
+                      ? "VERIFIED"
+                      : item.verification.status}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+        <h3 className="text-lg font-semibold">Canonical findings</h3>
+
+        <p className="mt-1 text-sm text-white/35">
+          {findings.length} persisted finding(s) available for handoff.
+        </p>
+
+        <div className="mt-4 space-y-2">
+          {findings.map((finding) => (
+            <div
+              key={finding.fingerprint}
+              className="flex items-center justify-between gap-3 rounded-xl border border-white/10 p-3"
+            >
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">
+                  [{finding.rule_id}] {finding.name}
+                </div>
+
+                <div className="mt-1 truncate text-[11px] text-white/35">
+                  {displayFile(finding.file || "")}:{finding.line}
+                </div>
+              </div>
+
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${workforceStateClass(
+                  finding.validation_state === "corroborated"
+                    ? "CORROBORATED"
+                    : "REQUIRES_VALIDATION"
+                )}`}
+              >
+                {(finding.validation_state || "unvalidated").toUpperCase()}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── History (persisted findings from the real backend) ──────
+
+function HistoryPanel({
+  apiUrl,
+  result,
+}: {
+  apiUrl: string;
+  result: SecureResult | null;
+}) {
+  const [findings, setFindings] = useState<CanonicalFinding[]>([]);
+  const [pending, setPending] = useState<HandoffItem[]>([]);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    try {
+      const [found, handoff] = await Promise.all([
+        fetch(`${apiUrl}/workforce/findings`),
+        fetch(`${apiUrl}/workforce/handoff`),
+      ]);
+
+      const foundJson = await found.json();
+      const handoffJson = await handoff.json();
+
+      setFindings(foundJson.findings || []);
+      setPending(handoffJson.pending || []);
+    } catch {
+      setError(
+        "Could not reach the PurpleGuard backend. Is the API running?"
+      );
+    }
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-purple-500/20 bg-purple-500/5 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-purple-300">
+              Persisted history
+            </div>
+
+            <h2 className="mt-2 text-2xl font-semibold">
+              Security findings that survive a restart
+            </h2>
+
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/40">
+              Canonical findings and the developer queue are read from the
+              PurpleGuard store, so the record persists across runs.
+            </p>
+          </div>
+
+          <button
+            onClick={refresh}
+            className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:bg-white/5"
+          >
+            Refresh
+          </button>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-white/10 p-4">
+            <div className="text-xs uppercase tracking-wider text-white/30">
+              Persisted findings
+            </div>
+            <div className="mt-2 text-2xl font-semibold">
+              {findings.length}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 p-4">
+            <div className="text-xs uppercase tracking-wider text-white/30">
+              Developer queue
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-purple-300">
+              {pending.length}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 p-4">
+            <div className="text-xs uppercase tracking-wider text-white/30">
+              Current run
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-white/60">
+              {result?.status || "—"}
+            </div>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/5 p-3 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+        <h3 className="text-lg font-semibold">
+          Persisted canonical findings
+        </h3>
+
+        {findings.length === 0 ? (
+          <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-white/40">
+            No persisted findings yet. Run a scan or a workforce assessment,
+            then refresh.
+          </div>
+        ) : (
+          <div className="mt-5 space-y-3">
+            {findings.map((finding) => (
+              <div
+                key={finding.fingerprint}
+                className="rounded-2xl border border-white/10 p-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span
+                      className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${severityClass(
+                        finding.severity || "LOW"
+                      )}`}
+                    >
+                      {finding.severity}
+                    </span>
+
+                    <span className="text-sm font-semibold">
+                      [{finding.rule_id}] {finding.name}
+                    </span>
+                  </div>
+
+                  <span
+                    className={`rounded-full px-3 py-1 text-[11px] font-semibold ${workforceStateClass(
+                      finding.validation_state === "corroborated"
+                        ? "CORROBORATED"
+                        : "REQUIRES_VALIDATION"
+                    )}`}
+                  >
+                    {(finding.validation_state || "unvalidated").toUpperCase()}
+                  </span>
+                </div>
+
+                <div className="mt-2 text-xs text-white/45">
+                  {displayFile(finding.file || "")}:{finding.line}
+                  {finding.code ? ` — ${finding.code}` : ""}
+                </div>
+
+                <div className="mt-2 text-[11px] text-white/35">
+                  remediation: {finding.remediation_state || "open"} ·
+                  verification: {finding.verification_state || "pending"} ·
+                  sources:{" "}
+                  {(finding.sources || [])
+                    .map((source) => source.agent_id)
+                    .join(", ") || "—"}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── ECC / Security Workforce (real capability map) ──────────
+
+function EccWorkforcePanel({ apiUrl }: { apiUrl: string }) {
+  const [capabilities, setCapabilities] = useState<WorkforceCapability[]>([]);
+  const [findings, setFindings] = useState<CanonicalFinding[]>([]);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    try {
+      const [caps, found] = await Promise.all([
+        fetch(`${apiUrl}/workforce/capabilities`),
+        fetch(`${apiUrl}/workforce/findings`),
+      ]);
+
+      const capsJson = await caps.json();
+      const foundJson = await found.json();
+
+      setCapabilities(capsJson.capabilities || []);
+      setFindings(foundJson.findings || []);
+    } catch {
+      setError(
+        "Could not reach the PurpleGuard backend. Is the API running?"
+      );
+    }
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const executable = capabilities.filter((cap) => cap.executable);
+  const unavailable = capabilities.filter((cap) => !cap.executable);
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-purple-500/20 bg-purple-500/5 p-6">
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-purple-300">
+          ECC · Security Workforce
+        </div>
+
+        <h2 className="mt-2 text-2xl font-semibold">
+          Real capabilities. Honest availability.
+        </h2>
+
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-white/40">
+          Every capability below executes through a real PurpleGuard engine. A
+          capability whose engine primitive does not exist is reported
+          UNAVAILABLE with the exact reason — never faked.
+        </p>
+
+        <div className="mt-5 grid grid-cols-3 gap-3">
+          <div className="rounded-2xl border border-white/10 p-4">
+            <div className="text-xs uppercase tracking-wider text-white/30">
+              Total
+            </div>
+            <div className="mt-2 text-2xl font-semibold">
+              {capabilities.length}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 p-4">
+            <div className="text-xs uppercase tracking-wider text-white/30">
+              Executable
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-emerald-300">
+              {executable.length}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 p-4">
+            <div className="text-xs uppercase tracking-wider text-white/30">
+              Unavailable
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-white/50">
+              {unavailable.length}
+            </div>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/5 p-3 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+          <h3 className="text-lg font-semibold">Executable capabilities</h3>
+
+          <div className="mt-4 space-y-2">
+            {executable.map((cap) => (
+              <div
+                key={cap.agent_id}
+                className="rounded-xl border border-white/10 p-3"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-semibold">{cap.agent_id}</div>
+                  <span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                    {cap.state}
+                  </span>
+                </div>
+
+                <div className="mt-1 break-all text-[11px] text-white/35">
+                  {cap.operation} · {cap.engine}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+          <h3 className="text-lg font-semibold">Unavailable capabilities</h3>
+
+          <p className="mt-1 text-sm text-white/35">
+            Reported honestly — no stub, no fake execution.
+          </p>
+
+          <div className="mt-4 space-y-2">
+            {unavailable.map((cap) => (
+              <div
+                key={cap.agent_id}
+                className="rounded-xl border border-white/10 p-3"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-semibold">{cap.agent_id}</div>
+                  <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-white/40">
+                    UNAVAILABLE
+                  </span>
+                </div>
+
+                <div className="mt-1 text-[11px] text-white/35">
+                  {cap.unavailable_reason}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+        <h3 className="text-lg font-semibold">Workforce state</h3>
+
+        <p className="mt-1 text-sm text-white/35">
+          {findings.length} canonical finding(s) persisted from real engine
+          runs.
+        </p>
+
+        <div className="mt-4 space-y-2">
+          {findings.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-white/40">
+              No canonical findings yet. Run an assessment from the Hacker
+              panel.
+            </div>
+          ) : (
+            findings.map((finding) => (
+              <div
+                key={finding.fingerprint}
+                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 p-3"
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold">
+                    [{finding.rule_id}] {finding.name}
+                  </div>
+
+                  <div className="mt-1 truncate text-[11px] text-white/35">
+                    {displayFile(finding.file || "")}:{finding.line}
+                  </div>
+                </div>
+
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${workforceStateClass(
+                    finding.validation_state === "corroborated"
+                      ? "CORROBORATED"
+                      : "REQUIRES_VALIDATION"
+                  )}`}
+                >
+                  {(finding.validation_state || "unvalidated").toUpperCase()}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
