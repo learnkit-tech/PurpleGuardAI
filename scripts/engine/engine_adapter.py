@@ -400,18 +400,39 @@ def run_discovery_and_validation(
         # 1. DISCOVER — real PurpleGuardHacker over the materialized target.
         log("engine: discovering attack surface (PurpleGuardHacker)")
         stages.append(("discovering attack surface", "PurpleGuardHacker.hack()"))
-        report_dict = PurpleGuardHacker(root).hack()
+        report = PurpleGuardHacker(root).hack()
+        report_dict = report.to_dict()
         attack_paths = report_dict.get("attack_paths", []) or []
         path_by_id = {p.get("id"): p for p in attack_paths}
         if not attack_paths:
+            # Hacker discovery found no attack paths. This is an honest
+            # red-team result, but it must not suppress the separate
+            # repository/static security pass.
+            stages.append((
+                "planning validations",
+                "0 attack paths — continuing to static security scan",
+            ))
+            stages.append((
+                "running static scan (PG rules)",
+                "SecurityScanner.scan()",
+            ))
+
+            for f in SecurityScanner(root).scan():
+                payload = _map_static_finding(project, root, f)
+                if payload:
+                    engine_findings.append(payload)
+
+            note = (
+                f"engine discovered no attack paths "
+                f"({report_dict.get('files_analyzed', 0)} files analyzed); "
+                f"static scan built {len(engine_findings)} finding payload(s)"
+            )
+            stages.append(("building finding payloads", note))
             return {
                 "ok": True,
-                "note": (
-                    f"engine discovered no attack paths "
-                    f"({report_dict.get('files_analyzed', 0)} files analyzed) — honest empty result"
-                ),
+                "note": note,
                 "stages": stages,
-                "findings": [],
+                "findings": engine_findings,
             }
 
         # 2. PLAN — real AttackPlanner maps categories to registered validators.
